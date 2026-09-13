@@ -141,20 +141,22 @@ export async function readOpeningState(
 		.innerJoin(ledgerAccount, eq(ledgerAccount.id, voucherLine.ledgerAccountId))
 		.where(and(eq(voucher.organizationId, organizationId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING')));
 
+	// Net amounts per account, so negative balances (overdrawn bank, stored on the credit side) survive a round trip
 	let bankOre = 0;
 	let loanOre = 0;
-	const ownerBalances: Array<{ ownerId: string; balanceOre: number }> = [];
+	const owners = new Map<string, number>();
 
 	for (const line of lines) {
-		if (line.code === '1920' && line.debitOre > 0) bankOre = line.debitOre;
-		else if (line.code === '2400' && line.creditOre > 0) loanOre = line.creditOre;
-		else if (line.code === '1500' && line.debitOre > 0 && line.ownerId) {
-			ownerBalances.push({ ownerId: line.ownerId, balanceOre: -line.debitOre });
-		} else if (line.code === '2770' && line.creditOre > 0 && line.ownerId) {
-			ownerBalances.push({ ownerId: line.ownerId, balanceOre: line.creditOre });
+		const debitMinusCredit = line.debitOre - line.creditOre;
+		if (line.code === '1920') bankOre += debitMinusCredit;
+		else if (line.code === '2400') loanOre -= debitMinusCredit;
+		// Positive = owner has prepaid (2770), negative = owner owes (1500)
+		else if ((line.code === '1500' || line.code === '2770') && line.ownerId) {
+			owners.set(line.ownerId, (owners.get(line.ownerId) ?? 0) - debitMinusCredit);
 		}
 	}
 
+	const ownerBalances = [...owners].filter(([, balanceOre]) => balanceOre !== 0).map(([ownerId, balanceOre]) => ({ ownerId, balanceOre }));
 	return { bankOre, loanOre, ownerBalances };
 }
 
@@ -208,9 +210,10 @@ export async function createOpeningVoucher(
 
 	if (opts.loanOre !== 0) {
 		const abs = Math.abs(opts.loanOre);
+		const [debitAcc, creditAcc] = opts.loanOre > 0 ? [acc2050, acc2400] : [acc2400, acc2050];
 		lines.push(
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc2050, debitOre: abs, creditOre: 0, ownerId: null },
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc2400, debitOre: 0, creditOre: abs, ownerId: null }
+			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: debitAcc, debitOre: abs, creditOre: 0, ownerId: null },
+			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: creditAcc, debitOre: 0, creditOre: abs, ownerId: null }
 		);
 	}
 

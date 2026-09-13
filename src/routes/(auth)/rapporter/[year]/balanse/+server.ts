@@ -56,13 +56,13 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	// --- Bank closing: opening (fra OPENING-bilag) + alle bank-bevegelser (også ukategoriserte) ---
 	// Bankbalansen reflekterer fysisk pengeflyt uavhengig av bokføringsstatus.
-	const [openingBankLine] = await db
-		.select({ debitOre: voucherLine.debitOre })
+	// Net, so an overdrawn opening balance (credit on 1920) counts as negative
+	const [openingBank] = await db
+		.select({ net: sql<string>`COALESCE(SUM(${voucherLine.debitOre}) - SUM(${voucherLine.creditOre}), 0)` })
 		.from(voucherLine)
 		.innerJoin(voucher, eq(voucher.id, voucherLine.voucherId))
 		.innerJoin(ledgerAccount, eq(ledgerAccount.id, voucherLine.ledgerAccountId))
-		.where(and(eq(voucher.organizationId, orgId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING'), eq(ledgerAccount.code, '1920')))
-		.limit(1);
+		.where(and(eq(voucher.organizationId, orgId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING'), eq(ledgerAccount.code, '1920')));
 	const [bankRow] = await db
 		.select({ total: sum(bankTransaction.amountOre) })
 		.from(bankTransaction)
@@ -72,7 +72,7 @@ export const GET: RequestHandler = async ({ params }) => {
 				inYear(bankTransaction.date, year)
 			)
 		);
-	const bankClosing = (openingBankLine?.debitOre ?? 0) + ore(bankRow?.total ?? null);
+	const bankClosing = ore(openingBank?.net ?? null) + ore(bankRow?.total ?? null);
 
 	// --- Loan closing (2400): aggregerer alle bilagslinjer inkl. OPENING ---
 	const [loanRow] = await db
