@@ -228,12 +228,13 @@ export const get_statements = query(async () => {
 		.orderBy(bankStatement.importedAt);
 });
 
-export const get_open_periods = query(async () => {
+// All periods, so closed years stay viewable; import_csv still requires an OPEN one
+export const get_periods = query(async () => {
 	const orgId = requireOrgId();
 	return db
 		.select()
 		.from(accountingPeriod)
-		.where(and(eq(accountingPeriod.organizationId, orgId), eq(accountingPeriod.status, 'OPEN')))
+		.where(eq(accountingPeriod.organizationId, orgId))
 		.orderBy(accountingPeriod.year);
 });
 

@@ -3,7 +3,7 @@
 	import { errorMessage } from '$lib/notify.svelte';
 	import {
 		get_transactions,
-		get_open_periods,
+		get_periods,
 		import_csv,
 		match_transaction,
 		categorize_transaction,
@@ -17,7 +17,7 @@
 	import { readAsBase64 } from '$lib/file';
 	import KategoriSelect from './KategoriSelect.svelte';
 
-	const openPeriods = get_open_periods();
+	const periodsQuery = get_periods();
 	const rulesData = get_rules();
 	const accountsData = get_accounts();
 
@@ -115,7 +115,7 @@
 		</ul>
 	</div>
 
-	{#await openPeriods then periods}
+	{#await periodsQuery then periods}
 		<div class="flex items-center gap-4 flex-wrap">
 			<div class="flex items-center gap-2">
 				<label class="text-sm font-medium" for="year-select">År:</label>
@@ -126,7 +126,7 @@
 					onchange={(e) => goto('/transaksjoner/' + e.currentTarget.value)}
 				>
 					{#each periods as p}
-						<option value={p.year}>{p.year}</option>
+						<option value={p.year}>{p.year}{p.status === 'CLOSED' ? ' (lukket)' : ''}</option>
 					{/each}
 				</select>
 			</div>

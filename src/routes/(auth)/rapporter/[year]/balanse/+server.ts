@@ -3,10 +3,9 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
-import { expectedRentByOwner } from '$lib/server/rent';
-import { inYear } from '$lib/server/period';
-import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
-import { eq, and, sql, sum, inArray } from 'drizzle-orm';
+import { closingBalances } from '$lib/server/balances';
+import { organization, voucher } from '$lib/schema';
+import { eq, and } from 'drizzle-orm';
 import { createRequire } from 'module';
 const pdfmake = createRequire(import.meta.url)('pdfmake');
 
@@ -18,10 +17,6 @@ pdfmake.addFonts({
 		bolditalics: 'Helvetica-BoldOblique'
 	}
 });
-
-function ore(val: string | null): number {
-	return parseInt(val ?? '0');
-}
 
 function sectionLayout(bodyLength: number) {
 	return {
@@ -49,71 +44,15 @@ export const GET: RequestHandler = async ({ params }) => {
 		.limit(1);
 	if (!openingVoucher) throw error(400, `Ingen inngående saldo registrert for ${year}. Legg den inn på rapporter-siden.`);
 
-	const fiscalYearFilter = and(
-		eq(voucher.organizationId, orgId),
-		eq(voucher.fiscalYear, year)
-	);
-
-	// --- Bank closing: opening (fra OPENING-bilag) + alle bank-bevegelser (også ukategoriserte) ---
-	// Bankbalansen reflekterer fysisk pengeflyt uavhengig av bokføringsstatus.
-	// Net, so an overdrawn opening balance (credit on 1920) counts as negative
-	const [openingBank] = await db
-		.select({ net: sql<string>`COALESCE(SUM(${voucherLine.debitOre}) - SUM(${voucherLine.creditOre}), 0)` })
-		.from(voucherLine)
-		.innerJoin(voucher, eq(voucher.id, voucherLine.voucherId))
-		.innerJoin(ledgerAccount, eq(ledgerAccount.id, voucherLine.ledgerAccountId))
-		.where(and(eq(voucher.organizationId, orgId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING'), eq(ledgerAccount.code, '1920')));
-	const [bankRow] = await db
-		.select({ total: sum(bankTransaction.amountOre) })
-		.from(bankTransaction)
-		.where(
-			and(
-				eq(bankTransaction.organizationId, orgId),
-				inYear(bankTransaction.date, year)
-			)
-		);
-	const bankClosing = ore(openingBank?.net ?? null) + ore(bankRow?.total ?? null);
-
-	// --- Loan closing (2400): aggregerer alle bilagslinjer inkl. OPENING ---
-	const [loanRow] = await db
-		.select({
-			delta: sql<string>`COALESCE(SUM(${voucherLine.creditOre}) - SUM(${voucherLine.debitOre}), 0)`
-		})
-		.from(voucherLine)
-		.innerJoin(voucher, eq(voucher.id, voucherLine.voucherId))
-		.innerJoin(ledgerAccount, eq(ledgerAccount.id, voucherLine.ledgerAccountId))
-		.where(and(fiscalYearFilter, eq(ledgerAccount.code, '2400')));
-	const loanClosing = ore(loanRow?.delta ?? null);
-
-	// --- Fordring / forhåndsbetalt per eier ---
-	const { expected: expectedPerOwner } = await expectedRentByOwner(orgId, year);
-	const ownerIds = [...expectedPerOwner.keys()];
-
-	// Per-owner: alle bilagslinjer med ownerId inkl. OPENING-bilag (åpningsbalanse)
-	// OPENING-bilagets 1500-linjer (debet) gir negativt bidrag = fordring ved årets start
-	// OPENING-bilagets 2770-linjer (kredit) gir positivt bidrag = forhåndsbetalt ved årets start
-	const paymentRows = ownerIds.length > 0
-		? await db
-			.select({
-				ownerId: voucherLine.ownerId,
-				total: sql<string>`COALESCE(SUM(${voucherLine.creditOre}) - SUM(${voucherLine.debitOre}), 0)`
-			})
-			.from(voucherLine)
-			.innerJoin(voucher, eq(voucher.id, voucherLine.voucherId))
-			.where(and(fiscalYearFilter, inArray(voucherLine.ownerId, ownerIds)))
-			.groupBy(voucherLine.ownerId)
-		: [];
-	const actualPerOwner = new Map(paymentRows.map((r) => [r.ownerId, ore(r.total)]));
-
-	// Compute closing balance per owner, aggregate fordring/forhåndsbetalt
+	// Same figures the next year's opening balance is carried forward from
+	const closing = await closingBalances(orgId, year);
+	const bankClosing = closing.bankOre;
+	const loanClosing = closing.loanOre;
 	let fordringClosing = 0;
 	let forhåndsClosing = 0;
-	for (const ownerId of ownerIds) {
-		const expectedO = expectedPerOwner.get(ownerId) ?? 0;
-		const actualO = actualPerOwner.get(ownerId) ?? 0;
-		const closingO = actualO - expectedO;
-		if (closingO < 0) fordringClosing += Math.abs(closingO);
-		else if (closingO > 0) forhåndsClosing += closingO;
+	for (const { balanceOre } of closing.ownerBalances) {
+		if (balanceOre < 0) fordringClosing -= balanceOre;
+		else forhåndsClosing += balanceOre;
 	}
 
 	// --- Egenkapital ---

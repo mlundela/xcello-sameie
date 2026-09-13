@@ -3,8 +3,11 @@ import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { accountingPeriod, owner, flatOwnership, flat } from '$lib/schema';
-import { eq, and, isNull, or, gte, desc } from 'drizzle-orm';
+import { eq, and, isNull, or, gte, desc, inArray } from 'drizzle-orm';
 import { createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
+import { closingBalances } from '$lib/server/balances';
+import { error } from '@sveltejs/kit';
+import { generateId } from 'better-auth';
 
 // From accounting periods, not bank transactions: a new sameie must be able to enter its
 // opening balance before the first CSV import.
@@ -81,6 +84,17 @@ export const get_owner_opening_balances = query(
 		const state = await readOpeningState(db, orgId, year);
 		const storedMap = new Map(state?.ownerBalances.map((r) => [r.ownerId, r.balanceOre]) ?? []);
 
+		// Former owners carried over with a balance (e.g. a seller who left with arrears) have no
+		// ownership this year but must stay visible and editable
+		const formerIds = [...storedMap.keys()].filter((id) => !ownerMap.has(id));
+		if (formerIds.length > 0) {
+			const former = await db
+				.select({ id: owner.id, name: owner.name })
+				.from(owner)
+				.where(and(eq(owner.organizationId, orgId), inArray(owner.id, formerIds)));
+			for (const o of former) ownerMap.set(o.id, { ownerName: o.name, flatNos: [] });
+		}
+
 		return [...ownerMap.entries()].map(([ownerId, data]) => ({
 			ownerId,
 			ownerName: data.ownerName,
@@ -112,5 +126,51 @@ export const set_owner_opening_balance = command(
 			});
 		});
 		await get_owner_opening_balances({ year }).refresh();
+	}
+);
+
+/**
+ * Starts the year after the latest accounting period, with an OPENING voucher carried forward
+ * from that year's closing balances. Only one year ahead of the calendar, so January's
+ * statement can be imported before anything else happens.
+ */
+export const open_next_year = command(v.object({}), async () => {
+	const orgId = requireAdmin();
+	const [latest] = await db
+		.select({ year: accountingPeriod.year })
+		.from(accountingPeriod)
+		.where(eq(accountingPeriod.organizationId, orgId))
+		.orderBy(desc(accountingPeriod.year))
+		.limit(1);
+	if (!latest) error(409, 'Sameiet har ingen regnskapsperioder ennå');
+	const year = latest.year + 1;
+	if (year > new Date().getFullYear() + 1) error(409, `Regnskapsår ${year} kan ikke startes før ${year - 1}`);
+
+	const closing = await closingBalances(orgId, latest.year);
+	await db.transaction(async (tx) => {
+		const created = await tx
+			.insert(accountingPeriod)
+			.values({ id: generateId(), organizationId: orgId, year, status: 'OPEN' })
+			.onConflictDoNothing()
+			.returning({ id: accountingPeriod.id });
+		if (created.length === 0) error(409, `Regnskapsår ${year} finnes allerede`);
+		await createOpeningVoucher(tx, { organizationId: orgId, year, ...closing });
+	});
+	return { year };
+});
+
+/** Replaces a year's opening balances with the previous year's closing balances. */
+export const carry_forward_opening_balance = command(
+	v.object({ year: v.pipe(v.number(), v.integer()) }),
+	async ({ year }) => {
+		const orgId = requireAdmin();
+		const periods = await db
+			.select({ year: accountingPeriod.year })
+			.from(accountingPeriod)
+			.where(and(eq(accountingPeriod.organizationId, orgId), or(eq(accountingPeriod.year, year), eq(accountingPeriod.year, year - 1))));
+		if (periods.length < 2) error(409, `Både ${year - 1} og ${year} må være regnskapsperioder`);
+
+		const closing = await closingBalances(orgId, year - 1);
+		await db.transaction((tx) => createOpeningVoucher(tx, { organizationId: orgId, year, ...closing }));
 	}
 );

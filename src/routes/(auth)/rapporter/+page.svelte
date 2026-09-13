@@ -7,7 +7,9 @@
 		get_opening_balance,
 		set_opening_balance,
 		get_owner_opening_balances,
-		set_owner_opening_balance
+		set_owner_opening_balance,
+		open_next_year,
+		carry_forward_opening_balance
 	} from './rapporter.remote';
 
 	const years = get_rapport_years();
@@ -23,6 +25,15 @@
 	{#await years}
 		<span class="loading loading-spinner"></span>
 	{:then list}
+		{@const nextYear = (list[0] ?? 0) + 1}
+		{#if page.data.canEdit && list.length > 0 && nextYear <= new Date().getFullYear() + 1}
+			<div class="flex items-center gap-3 flex-wrap">
+				<button class="btn btn-primary btn-sm" onclick={() => open_next_year({}).updates(years)}>
+					Start regnskapsår {nextYear}
+				</button>
+				<span class="text-xs text-base-content/50">Inngående saldo hentes fra utgående saldo {nextYear - 1}.</span>
+			</div>
+		{/if}
 		{#if list.length === 0}
 			<p class="text-base-content/50">Ingen regnskapsperioder registrert ennå.</p>
 		{:else}
@@ -63,7 +74,18 @@
 
 							<div class="divider my-0"></div>
 
-							<p class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Inngående saldo 1. jan {year}</p>
+							<div class="flex items-center justify-between gap-2">
+								<p class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Inngående saldo 1. jan {year}</p>
+								{#if page.data.canEdit && list.includes(year - 1)}
+									<button
+										class="btn btn-ghost btn-xs"
+										onclick={() => {
+											if (confirm(`Erstatte inngående saldo for ${year} med utgående saldo fra ${year - 1}?`))
+												carry_forward_opening_balance({ year }).updates(obQuery, ownerBalQuery);
+										}}
+									>Hent fra {year - 1}</button>
+								{/if}
+							</div>
 
 							{#await obQuery then ob}
 								{@const bankVal = ob ? oreToKr(ob.bankOre) : ''}
