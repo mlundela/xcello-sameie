@@ -1,7 +1,8 @@
 <script lang="ts">
     import {authClient} from '$lib/auth-client';
-    import {goto} from '$app/navigation';
+    import {goto, refreshAll} from '$app/navigation';
     import {page} from '$app/state';
+    import {errorMessage} from '$lib/notify.svelte';
     import {get_layout_data} from './layout.remote';
 
     const {children} = $props();
@@ -10,7 +11,10 @@
 
     async function switchOrg(organizationId: string) {
         await authClient.organization.setActive({organizationId});
-        await data.refresh();
+        // Every cached query holds the previous sameie's data, and the current page (a flat,
+        // a transaction) may not exist in the new one. Leave it first, then refetch everything.
+        await goto('/dashboard');
+        await refreshAll();
     }
 
     async function signOut() {
@@ -19,12 +23,15 @@
     }
 
     function isActive(path: string) {
-        console.log(page.url.pathname);
         return page.url.pathname === path;
     }
 </script>
 
-{#await data then {user, activeOrg, organizations}}
+{#await data}
+    <div class="flex min-h-screen items-center justify-center bg-base-200">
+        <span class="loading loading-spinner loading-lg text-primary"></span>
+    </div>
+{:then {user, activeOrg, organizations}}
     {@const meta = activeOrg?.metadata ? JSON.parse(activeOrg.metadata) : {}}
     <div class="flex min-h-screen">
         <aside class="w-56 bg-base-200 border-r border-base-100 flex flex-col shrink-0">
@@ -155,6 +162,13 @@
 
         <div class="flex-1 flex flex-col bg-base-200">
             {@render children()}
+        </div>
+    </div>
+{:catch err}
+    <div class="flex min-h-screen items-center justify-center bg-base-200 px-4">
+        <div role="alert" class="alert alert-error">
+            <span>{errorMessage(err)}</span>
+            <a href="/login" class="btn btn-sm">Logg inn på nytt</a>
         </div>
     </div>
 {/await}
