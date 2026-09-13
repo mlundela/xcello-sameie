@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+html, body {
+  font-size: 18px;
+}
+
+@plugin "daisyui" {
+  themes: coffee --default;
+}
