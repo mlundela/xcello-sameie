@@ -21,8 +21,9 @@ export const handleError: HandleServerError = ({ error, status }) => {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
+	event.locals.role = null;
 	if (session && !event.url.pathname.startsWith('/api/auth')) {
-		await ensureActiveMembership(session, event.request.headers);
+		event.locals.role = await ensureActiveMembership(session, event.request.headers);
 	}
 	event.locals.session = session;
 	return svelteKitHandler({ event, resolve, auth, building });

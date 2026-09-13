@@ -120,7 +120,9 @@
 									<p class="text-sm">{tx.description}</p>
 								{/if}
 							</div>
-							<button class="btn btn-ghost btn-sm" onclick={() => { userDesc = tx.userDescription ?? ''; editingDesc = true; }}>Endre</button>
+							{#if page.data.canEdit}
+								<button class="btn btn-ghost btn-sm" onclick={() => { userDesc = tx.userDescription ?? ''; editingDesc = true; }}>Endre</button>
+							{/if}
 						</div>
 					{:else}
 						<div class="flex gap-2">
@@ -156,18 +158,22 @@
 								{tx.ledgerAccountCode} {tx.ledgerAccountName}
 							{/if}
 						</div>
-						<button
-							class="btn btn-ghost btn-sm text-error"
-							onclick={() => unmatch_transaction({ transactionId: id }).updates(txQuery)}
-						>Fjern</button>
+						{#if page.data.canEdit}
+							<button
+								class="btn btn-ghost btn-sm text-error"
+								onclick={() => unmatch_transaction({ transactionId: id }).updates(txQuery)}
+							>Fjern</button>
+						{/if}
 					</div>
-				{:else}
+				{:else if page.data.canEdit}
 					<KategoriSelect
 						{isIncome}
 						{owners}
 						{accounts}
 						onpick={(k) => (k.kind === 'owner' ? match_transaction({ transactionId: id, ownerId: k.ownerId }) : categorize_transaction({ transactionId: id, ledgerAccountId: k.ledgerAccountId })).updates(txQuery)}
 					/>
+				{:else}
+					<p class="text-sm text-base-content/50">Ikke kategorisert.</p>
 				{/if}
 			</div>
 		</div>
@@ -201,6 +207,7 @@
 								type="checkbox"
 								class="checkbox checkbox-sm"
 								checked={tx.receiptNotRequired}
+								disabled={!page.data.canEdit}
 								onchange={(e) => set_receipt_not_required({ transactionId: id, value: e.currentTarget.checked }).updates(txQuery)}
 							/>
 							<span class="text-sm">Kvittering ikke nødvendig</span>

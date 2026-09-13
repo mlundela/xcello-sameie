@@ -1,7 +1,7 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { assertInOrg, requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { accountingPeriod, owner, flatOwnership, flat } from '$lib/schema';
 import { eq, and, isNull, or, gte, desc } from 'drizzle-orm';
 import { createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
@@ -35,7 +35,7 @@ export const set_opening_balance = command(
 		loanOre: v.number()
 	}),
 	async ({ year, bankOre, loanOre }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);
 			await createOpeningVoucher(tx, {
@@ -97,7 +97,7 @@ export const set_owner_opening_balance = command(
 		balanceOre: v.number()
 	}),
 	async ({ year, ownerId, balanceOre }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(owner, [ownerId], orgId);
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);

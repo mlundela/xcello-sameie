@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { krToOre } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
+	import { page } from '$app/state';
 	import {
 		get_rapport_years,
 		get_opening_balance,
@@ -83,6 +84,7 @@
 										<span class="text-xs text-base-content/60">1920 Bankkonto (kr)</span>
 										<input
 											name="bank"
+											disabled={!page.data.canEdit}
 											type="text"
 											inputmode="decimal"
 											class="input input-bordered input-sm"
@@ -94,6 +96,7 @@
 										<span class="text-xs text-base-content/60">2400 Langsiktig gjeld (kr)</span>
 										<input
 											name="loan"
+											disabled={!page.data.canEdit}
 											type="text"
 											inputmode="decimal"
 											class="input input-bordered input-sm"
@@ -101,9 +104,11 @@
 											placeholder="0,00"
 										/>
 									</label>
-									<div class="col-span-2">
-										<button type="submit" class="btn btn-primary btn-sm">Lagre</button>
-									</div>
+									{#if page.data.canEdit}
+										<div class="col-span-2">
+											<button type="submit" class="btn btn-primary btn-sm">Lagre</button>
+										</div>
+									{/if}
 								</form>
 							{/await}
 
@@ -122,6 +127,7 @@
 													type="text"
 													inputmode="decimal"
 													class="input input-bordered input-xs w-28 text-right font-mono"
+													disabled={!page.data.canEdit}
 													value={oreToKr(o.balanceOre)}
 													placeholder="0,00"
 													onchange={(e) => {

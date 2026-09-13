@@ -2,6 +2,7 @@
     import { formatKr } from '$lib/money';
     import { errorMessage } from '$lib/notify.svelte';
     import {get_flats} from './flats.remote';
+    import {page} from '$app/state';
 
     const flats = get_flats();
 </script>
@@ -66,15 +67,17 @@
             </div>
         </div>
 
-        <div class="card bg-base-100">
-            <div class="card-body">
-                <h2 class="card-title">Oppdater husleien</h2>
-                <p>Følg guiden for å endre satsene for husleie</p>
-                <div class="card-actions justify-end">
-                    <a href="/husleie" class="btn btn-primary">Gå videre</a>
+        {#if page.data.canEdit}
+            <div class="card bg-base-100">
+                <div class="card-body">
+                    <h2 class="card-title">Oppdater husleien</h2>
+                    <p>Følg guiden for å endre satsene for husleie</p>
+                    <div class="card-actions justify-end">
+                        <a href="/husleie" class="btn btn-primary">Gå videre</a>
+                    </div>
                 </div>
             </div>
-        </div>
+        {/if}
 
     {:catch err}
         <div role="alert" class="alert alert-error">

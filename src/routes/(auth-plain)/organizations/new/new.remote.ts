@@ -2,7 +2,7 @@ import { command, query, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
 import { ADDRESS_ID_PATTERN, auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
-import { assertInOrg, requireOrgId, requireSession } from '$lib/server/tenant';
+import { assertInOrg, requireAdmin, requireOrgId, requireSession } from '$lib/server/tenant';
 import { flat, accountingPeriod, flatRent, flatOwnership, owner } from '$lib/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateId } from 'better-auth';
@@ -49,7 +49,7 @@ export const setup_accounting_periods = command(
 		}))
 	}),
 	async ({ startYear, bankOre, loanOre, ownerBalances }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(owner, ownerBalances.map((o) => o.ownerId), orgId);
 		const currentYear = new Date().getFullYear();
 		const rows = Array.from({ length: currentYear - startYear + 1 }, (_, i) => ({
@@ -74,7 +74,7 @@ export const set_initial_rent = command(
 		}))
 	}),
 	async ({ fromYear, rents }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(flat, rents.map((r) => r.flatId), orgId);
 		await db.transaction(async (tx) => {
 			for (const { flatId, amountKr } of rents) {

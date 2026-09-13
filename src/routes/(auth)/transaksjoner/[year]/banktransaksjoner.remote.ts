@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { assertInOrg, requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import {
 	bankTransaction,
 	bankStatement,
@@ -243,7 +243,7 @@ export const import_csv = command(
 		fileName: v.pipe(v.string(), v.minLength(1))
 	}),
 	async ({ csvBase64, fileName }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 
 		const csvText = decodeBuffer(Buffer.from(csvBase64, 'base64'));
 		const parsed = detectAndParse(csvText);
@@ -421,7 +421,7 @@ async function get3600AccountId(orgId: string): Promise<string | null> {
 export const match_transaction = command(
 	v.object({ transactionId: v.string(), ownerId: v.string() }),
 	async ({ transactionId, ownerId }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
@@ -465,7 +465,7 @@ export const create_rule_and_apply = command(
 		userDescription: v.optional(v.string())
 	}),
 	async ({ pattern, ownerId, receiptNotRequired, userDescription }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
@@ -523,7 +523,7 @@ export const create_expense_rule_and_apply = command(
 		userDescription: v.optional(v.string())
 	}),
 	async ({ pattern, ledgerAccountId, receiptNotRequired, userDescription }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		const categorized = await db.transaction(async (tx) => {
 			await tx
@@ -572,7 +572,7 @@ export const create_expense_rule_and_apply = command(
 export const unmatch_transaction = command(
 	v.object({ transactionId: v.string() }),
 	async ({ transactionId }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await db.transaction(async (tx) => {
 			const updated = await tx
 				.update(bankTransaction)
@@ -589,7 +589,7 @@ export const unmatch_transaction = command(
 export const categorize_transaction = command(
 	v.object({ transactionId: v.string(), ledgerAccountId: v.string() }),
 	async ({ transactionId, ledgerAccountId }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		await db.transaction(async (tx) => {
 			await deleteBankAutoVoucher(tx, transactionId);
@@ -625,7 +625,7 @@ export const categorize_transaction = command(
 export const update_description = command(
 	v.object({ transactionId: v.string(), userDescription: v.nullable(v.string()) }),
 	async ({ transactionId, userDescription }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await db
 			.update(bankTransaction)
 			.set({ userDescription })
@@ -691,7 +691,7 @@ export const delete_attachment = command(
 export const set_receipt_not_required = command(
 	v.object({ transactionId: v.pipe(v.string(), v.minLength(1)), value: v.boolean() }),
 	async ({ transactionId, value }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await db
 			.update(bankTransaction)
 			.set({ receiptNotRequired: value })

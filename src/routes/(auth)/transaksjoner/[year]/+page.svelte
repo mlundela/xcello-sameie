@@ -146,11 +146,13 @@
 				{#if importError}
 					<div class="alert alert-error py-2 px-4 text-sm">{importError}</div>
 				{/if}
-				<button class="btn btn-primary btn-sm" disabled={importing} onclick={() => fileInput!.click()}>
-					{#if importing}<span class="loading loading-spinner loading-sm"></span>{/if}
-					Importer kontoutskrift
-				</button>
-				<input bind:this={fileInput} type="file" accept=".csv" class="hidden" aria-label="Velg CSV-fil" onchange={handleFileChange} />
+				{#if page.data.canEdit}
+					<button class="btn btn-primary btn-sm" disabled={importing} onclick={() => fileInput!.click()}>
+						{#if importing}<span class="loading loading-spinner loading-sm"></span>{/if}
+						Importer kontoutskrift
+					</button>
+					<input bind:this={fileInput} type="file" accept=".csv" class="hidden" aria-label="Velg CSV-fil" onchange={handleFileChange} />
+				{/if}
 			</div>
 		</div>
 	{/await}
@@ -195,7 +197,7 @@
 										<span class="badge badge-sm {s.cls}">{s.label}</span>
 									</td>
 									<td class="text-base-content">
-										{#if row.status === 'UNMATCHED'}
+										{#if row.status === 'UNMATCHED' && page.data.canEdit}
 											<KategoriSelect
 												{isIncome}
 												{owners}

@@ -45,7 +45,7 @@
                     <ul class="flex flex-col divide-y divide-base-200">
                         {#each currentOwners as {owner, ownership}}
                             <li class="py-3 flex items-start gap-3">
-                                {#if currentOwners.length > 1}
+                                {#if currentOwners.length > 1 && page.data.canEdit}
                                     <input
                                         type="radio"
                                         class="radio radio-sm mt-0.5"

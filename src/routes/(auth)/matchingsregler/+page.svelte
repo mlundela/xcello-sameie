@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/notify.svelte';
+	import { page } from '$app/state';
 	import { get_rules, create_rule, delete_rule } from './matchingsregler.remote';
 	import { get_accounts } from '../kontoplan/kontoplan.remote';
 
@@ -83,10 +84,12 @@
 									</td>
 									<td class="text-base-content/70">{rule.userDescription ?? ''}</td>
 									<td class="text-right">
-										<button
-											class="btn btn-ghost btn-xs text-error"
-											onclick={() => delete_rule({ id: rule.id })}
-										>Slett</button>
+										{#if page.data.canEdit}
+											<button
+												class="btn btn-ghost btn-xs text-error"
+												onclick={() => delete_rule({ id: rule.id })}
+											>Slett</button>
+										{/if}
 									</td>
 								</tr>
 							{/each}
@@ -96,6 +99,7 @@
 			</div>
 		</div>
 
+		{#if page.data.canEdit}
 		<div class="card bg-base-100">
 			<div class="card-body gap-4">
 				<h2 class="card-title text-base">Ny regel</h2>
@@ -144,6 +148,7 @@
 				</div>
 			</div>
 		</div>
+		{/if}
 	{:catch err}
 		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/notify.svelte';
+	import { page } from '$app/state';
 	import { get_accounts, create_account, delete_account, seed_default_accounts } from './kontoplan.remote';
 
 	const accounts = get_accounts();
@@ -47,13 +48,15 @@
 			<div class="card bg-base-100">
 				<div class="card-body items-center gap-4">
 					<p class="text-base-content/60">Ingen kontoer er satt opp ennå.</p>
-					<button class="btn btn-primary" onclick={seed} disabled={seeding}>
-						{#if seeding}<span class="loading loading-spinner loading-sm"></span>{/if}
-						Last inn standard kontoer (NS 4102)
-					</button>
+					{#if page.data.canEdit}
+						<button class="btn btn-primary" onclick={seed} disabled={seeding}>
+							{#if seeding}<span class="loading loading-spinner loading-sm"></span>{/if}
+							Last inn standard kontoer (NS 4102)
+						</button>
+					{/if}
 				</div>
 			</div>
-		{:else}
+		{:else if page.data.canEdit}
 			<div class="flex justify-end">
 				<button class="btn btn-ghost btn-sm" onclick={seed} disabled={seeding}>
 					{#if seeding}<span class="loading loading-spinner loading-sm"></span>{/if}
@@ -82,10 +85,12 @@
 										<td class="font-mono">{account.code}</td>
 										<td>{account.name}</td>
 										<td class="text-right">
-											<button
-												class="btn btn-ghost btn-xs text-error"
-												onclick={() => delete_account({ id: account.id })}
-											>Slett</button>
+											{#if page.data.canEdit}
+												<button
+													class="btn btn-ghost btn-xs text-error"
+													onclick={() => delete_account({ id: account.id })}
+												>Slett</button>
+											{/if}
 										</td>
 									</tr>
 								{/each}
@@ -96,6 +101,7 @@
 			{/if}
 		{/each}
 
+		{#if page.data.canEdit}
 		<div class="card bg-base-100">
 			<div class="card-body gap-4">
 				<h2 class="card-title text-base">Legg til konto</h2>
@@ -128,6 +134,7 @@
 				</div>
 			</div>
 		</div>
+		{/if}
 	{:catch err}
 		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}

@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { assertInOrg, requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { matchingRule, owner, flat, flatOwnership, ledgerAccount } from '$lib/schema';
 import { eq, isNull, and } from 'drizzle-orm';
 import { generateId } from 'better-auth';
@@ -49,7 +49,7 @@ export const create_rule = command(
 		userDescription: v.optional(v.string())
 	}),
 	async ({ pattern, ownerId, ledgerAccountId, receiptNotRequired, userDescription }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		if (!ownerId === !ledgerAccountId) error(400, 'Velg enten en eier eller en konto');
 		if (ownerId) await assertInOrg(owner, [ownerId], orgId);
 		if (ledgerAccountId) await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
@@ -69,7 +69,7 @@ export const create_rule = command(
 export const delete_rule = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		await db.delete(matchingRule).where(and(eq(matchingRule.id, id), eq(matchingRule.organizationId, orgId)));
 		await get_rules().refresh();
 	}

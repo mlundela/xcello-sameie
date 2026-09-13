@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { requireOrgId } from '$lib/server/tenant';
+import { requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { flat, flatOwnership, flatRent, owner } from '$lib/schema';
 import { and, eq, desc } from 'drizzle-orm';
 
@@ -36,7 +36,7 @@ export const get_flat = query(v.object({ flatNo: v.string() }), async ({ flatNo 
 export const set_payment_responsible = command(
 	v.object({ flatNo: v.string(), ownerId: v.string() }),
 	async ({ flatNo, ownerId }) => {
-		const orgId = requireOrgId();
+		const orgId = requireAdmin();
 		const [flatRow] = await db
 			.select({ id: flat.id })
 			.from(flat)

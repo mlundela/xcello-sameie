@@ -2,6 +2,10 @@
 
 Accounting and property management for Norwegian housing cooperatives (sameier): bank statement import and reconciliation, felleskostnader per owner, receipts, and year-end reports (resultatregnskap and balanse) as PDF. SvelteKit, Drizzle, Postgres, better-auth.
 
+## Roles
+
+Each sameie has owners, administrators and members. Owners and administrators can do everything. Members can see everything (dashboard, transactions, reports, chart of accounts, rules) and upload or delete receipts, but can't import statements, categorise transactions, or change accounts, rules, rent or opening balances.
+
 ## Development
 
 ```bash

@@ -2,6 +2,7 @@
 	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { get_husleie, set_bulk_rent } from './husleie.remote';
 
 	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -65,7 +66,11 @@
 		<div class="card bg-base-100 shadow-xl">
 			<div class="card-body">
 
-				{#if step === 1}
+				{#if !page.data.canEdit}
+					<h1 class="card-title text-xl mb-2">Oppdater husleien</h1>
+					<p class="text-sm text-base-content/70">Bare administratorer kan endre husleien.</p>
+					<a href="/flats" class="btn btn-ghost mt-2">Tilbake til leiligheter</a>
+				{:else if step === 1}
 					<h1 class="card-title text-xl mb-2">Velg startdato</h1>
 					<p class="text-sm text-base-content/60 mb-4">
 						Fra hvilken måned skal de nye satsene gjelde?
