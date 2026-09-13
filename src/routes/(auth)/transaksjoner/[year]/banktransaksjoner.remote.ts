@@ -621,7 +621,7 @@ export const get_attachments = query(
 				id: attachment.id,
 				fileName: attachment.fileName,
 				mimeType: attachment.mimeType,
-				content: attachment.content,
+				// No `content`: files are up to 10 MB each. The page links to /vedlegg/[id] instead.
 				uploadedAt: attachment.uploadedAt
 			})
 			.from(attachment)

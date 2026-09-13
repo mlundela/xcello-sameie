@@ -291,8 +291,9 @@
 							{#each attachments as att}
 								<li class="flex items-center gap-3 py-2">
 									<a
-										href="data:{att.mimeType};base64,{att.content}"
-										download={att.fileName}
+										href="/vedlegg/{att.id}"
+										target="_blank"
+										rel="noopener"
 										class="link link-primary text-sm flex-1 truncate"
 									>{att.fileName}</a>
 									<button
