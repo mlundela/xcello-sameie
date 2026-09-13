@@ -6,7 +6,7 @@ import * as schema from '$lib/schema';
 import {flat, flatOwnership, ledgerAccount, matchingRule, member, owner} from '$lib/schema';
 import {env} from '$env/dynamic/private';
 import {sendInviteEmail, sendVerificationEmail} from './email';
-import {and, eq} from "drizzle-orm";
+import {eq} from "drizzle-orm";
 import {DEFAULT_ACCOUNTS} from './default-accounts';
 import {building} from '$app/environment';
 
@@ -15,6 +15,34 @@ if (!building) {
     if (!env.GOOGLE_CLIENT_SECRET) throw new Error('GOOGLE_CLIENT_SECRET is not set');
     if (!env.ORIGIN) throw new Error('ORIGIN is not set');
     if (!env.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is not set');
+}
+
+type Seksjon = {
+    nummer: number;
+    brøk: { teller: number; nevner: number };
+    bruksenhetNummer: string;
+    eiere: Array<{
+        dato: string;
+        brøk: { teller: number; nevner: number };
+        person: { navn: string; id: string };
+    }>;
+};
+
+/** Sections and owners at an address from the Matrikkel service. Org creation goes on without them. */
+async function fetchSeksjoner(addressId: unknown): Promise<Seksjon[]> {
+    if (typeof addressId !== 'string' || !addressId) return [];
+    if (!env.MATRIKKEL_API_URL) {
+        console.warn('MATRIKKEL_API_URL is not set; creating organization without flats and owners');
+        return [];
+    }
+    try {
+        const res = await fetch(`${env.MATRIKKEL_API_URL}/api/adresse/${addressId}`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+    } catch (err) {
+        console.error(`Matrikkel lookup failed for ${addressId}:`, err);
+        return [];
+    }
 }
 
 export const auth = betterAuth({
@@ -79,98 +107,65 @@ export const auth = betterAuth({
         organization({
             organizationHooks: {
                 afterCreateOrganization: async ({organization: org}) => {
-                    const metadata = org.metadata ?? {};
-                    const addressId = metadata.addressId;
-                    if (!addressId || !env.MATRIKKEL_API_URL) return;
+                    // Network call first, so the transaction isn't held open while Matrikkel responds
+                    const seksjoner = await fetchSeksjoner(org.metadata?.addressId);
 
-                    const res = await fetch(`${env.MATRIKKEL_API_URL}/api/adresse/${addressId}`);
-                    if (!res.ok) return;
+                    await db.transaction(async (tx) => {
+                        // Always: every voucher needs these accounts, with or without Matrikkel data
+                        await tx.insert(ledgerAccount).values(
+                            DEFAULT_ACCOUNTS.map((a) => ({id: generateId(), organizationId: org.id, ...a}))
+                        );
+                        if (seksjoner.length === 0) return;
 
-                    const seksjoner: Array<{
-                        nummer: number;
-                        brøk: { teller: number; nevner: number };
-                        bruksenhetNummer: string;
-                        eiere: Array<{
-                            dato: string;
-                            brøk: { teller: number; nevner: number };
-                            person: { navn: string; id: string };
-                        }>;
-                    }> = await res.json();
+                        const flatRows = seksjoner.map((s) => ({
+                            id: generateId(),
+                            organizationId: org.id,
+                            nummer: s.nummer,
+                            flatNo: s.bruksenhetNummer,
+                            shareNumerator: s.brøk.teller,
+                            shareDenominator: s.brøk.nevner
+                        }));
 
-                    const flatRows = seksjoner.map((s) => ({
-                        id: generateId(),
-                        organizationId: org.id,
-                        nummer: s.nummer,
-                        flatNo: s.bruksenhetNummer,
-                        shareNumerator: s.brøk.teller,
-                        shareDenominator: s.brøk.nevner
-                    }));
-
-                    await db.insert(flat).values(flatRows);
-
-                    await db.insert(ledgerAccount).values(
-                        DEFAULT_ACCOUNTS.map((a) => ({id: generateId(), organizationId: org.id, ...a}))
-                    );
-
-                    for (const seksjon of seksjoner) {
-                        const flatId = flatRows.find((f) => f.nummer === seksjon.nummer)!.id;
-                        let isFirst = true;
-
-                        for (const eier of seksjon.eiere) {
-                            const existing = await db
-                                .select({id: owner.id})
-                                .from(owner)
-                                .where(and(eq(owner.publicId, eier.person.id), eq(owner.organizationId, org.id)))
-                                .limit(1);
-
-                            let ownerId: string;
-                            if (existing.length === 0) {
-                                ownerId = generateId();
-                                await db.insert(owner).values({
-                                    id: ownerId,
-                                    organizationId: org.id,
-                                    name: eier.person.navn,
-                                    ownerType: 'PERSON',
-                                    publicId: eier.person.id
+                        // One owner (and name-based matching rule) per person, even across several flats
+                        const owners = new Map<string, typeof owner.$inferInsert>();
+                        const ownerships: (typeof flatOwnership.$inferInsert)[] = [];
+                        seksjoner.forEach((seksjon, i) => {
+                            seksjon.eiere.forEach((eier, j) => {
+                                if (!owners.has(eier.person.id)) {
+                                    owners.set(eier.person.id, {
+                                        id: generateId(),
+                                        organizationId: org.id,
+                                        name: eier.person.navn,
+                                        ownerType: 'PERSON',
+                                        publicId: eier.person.id
+                                    });
+                                }
+                                ownerships.push({
+                                    id: generateId(),
+                                    flatId: flatRows[i].id,
+                                    ownerId: owners.get(eier.person.id)!.id!,
+                                    fromDate: eier.dato,
+                                    toDate: null,
+                                    shareNumerator: eier.brøk.teller,
+                                    shareDenominator: eier.brøk.nevner,
+                                    isPaymentResponsible: j === 0
                                 });
-                            } else {
-                                ownerId = existing[0].id;
-                            }
-
-                            await db.insert(flatOwnership).values({
-                                id: generateId(),
-                                flatId,
-                                ownerId,
-                                fromDate: eier.dato,
-                                toDate: null,
-                                shareNumerator: eier.brøk.teller,
-                                shareDenominator: eier.brøk.nevner,
-                                isPaymentResponsible: isFirst
                             });
-                            isFirst = false;
+                        });
 
-                            const existingRule = await db
-                                .select({id: matchingRule.id})
-                                .from(matchingRule)
-                                .where(and(
-                                    eq(matchingRule.organizationId, org.id),
-                                    eq(matchingRule.ownerId, ownerId)
-                                ))
-                                .limit(1);
-
-                            if (existingRule.length === 0) {
-                                await db.insert(matchingRule).values([
-                                        {
-                                            id: generateId(),
-                                            organizationId: org.id,
-                                            pattern: eier.person.navn,
-                                            ownerId
-                                        }
-                                    ]
-                                );
-                            }
-                        }
-                    }
+                        await tx.insert(flat).values(flatRows);
+                        if (owners.size === 0) return;
+                        await tx.insert(owner).values([...owners.values()]);
+                        await tx.insert(flatOwnership).values(ownerships);
+                        await tx.insert(matchingRule).values(
+                            [...owners.values()].map((o) => ({
+                                id: generateId(),
+                                organizationId: org.id,
+                                pattern: o.name,
+                                ownerId: o.id
+                            }))
+                        );
+                    });
                 },
                 // After a member is removed
                 afterRemoveMember: async ({member, user, organization}) => {

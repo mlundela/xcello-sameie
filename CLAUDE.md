@@ -23,7 +23,7 @@ bun run db:seed                  # src/lib/server/seed.ts — demo users/orgs on
 
 There is **no test framework**. "Verification before done" means `bun run check` plus exercising the flow against the local DB (`psql`, `db:studio`, or the dev server). Don't claim tests pass; don't add a test runner unless asked.
 
-`.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, `GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `MATRIKKEL_API_URL`. Note `MATRIKKEL_API_URL` points at a **separate external service not in compose.yml**; org creation degrades silently (no flats, no chart of accounts) when it's unset or unreachable.
+`.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, `GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `MATRIKKEL_API_URL`. Note `MATRIKKEL_API_URL` points at a **separate external service not in compose.yml**; when it's unset or unreachable, org creation logs the failure and continues with the chart of accounts but no flats or owners.
 
 ## Domain
 
@@ -47,7 +47,7 @@ Route groups enforce access:
 - `(auth)` — requires session **and** an active org (else → `/organizations/new`); wraps everything in the sidebar layout
 - `(auth-plain)` — requires session only, no active-org requirement (org creation, husleie)
 
-`afterCreateOrganization` in `auth.ts` does the whole onboarding: fetches sections/owners from the Matrikkel API, then inserts `flat`, `ledgerAccount` (from `DEFAULT_ACCOUNTS`), `owner`, `flatOwnership`, and one name-based `matchingRule` per owner.
+`afterCreateOrganization` in `auth.ts` does the whole onboarding: fetches sections/owners from the Matrikkel API, then in one transaction always inserts `ledgerAccount` (from `DEFAULT_ACCOUNTS`) and, if Matrikkel returned data, `flat`, `owner`, `flatOwnership`, and one name-based `matchingRule` per owner. better-auth awaits the hook, so the data exists when `createOrganization` returns; no polling needed.
 
 ### Data access is remote functions, not load functions
 `kit.experimental.remoteFunctions` is on. Each route owns a `<name>.remote.ts` exporting `query()`/`command()` from `$app/server`, with valibot schemas for args. Conventions to follow exactly:

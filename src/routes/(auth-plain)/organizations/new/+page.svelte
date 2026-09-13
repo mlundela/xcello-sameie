@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
-	import { onDestroy } from 'svelte';
 	import { create_organization, get_setup_flats, get_setup_owners, setup_accounting_periods, set_initial_rent } from './new.remote';
 
 	type GeoAddress = {
@@ -62,29 +61,6 @@
 			amounts[f.id] = String(Math.round(unitRate * (f.shareNumerator / f.shareDenominator)));
 		}
 	}
-
-	let pollInterval: ReturnType<typeof setInterval> | null = null;
-
-	async function pollData() {
-		const [flatResult, ownerResult] = await Promise.all([get_setup_flats(), get_setup_owners()]);
-		if (ownerResult.length > 0) owners = ownerResult;
-		if (flatResult.length > 0) {
-			flats = flatResult;
-			if (pollInterval) {
-				clearInterval(pollInterval);
-				pollInterval = null;
-			}
-		}
-	}
-
-	function startPolling() {
-		pollData();
-		pollInterval = setInterval(pollData, 1500);
-	}
-
-	onDestroy(() => {
-		if (pollInterval) clearInterval(pollInterval);
-	});
 
 	async function lookupOrg() {
 		lookupError = '';
@@ -179,8 +155,9 @@
 				postalCode: geoAddress.postnummer,
 				city: geoAddress.poststed
 			});
+			// The Matrikkel import runs inside organization creation, so its result is already stored
+			[flats, owners] = await Promise.all([get_setup_flats(), get_setup_owners()]);
 			step = 2;
-			startPolling(); // Matrikkel import has started – poll owners immediately
 		} catch (err: unknown) {
 			submitError = errorMessage(err, 'Noe gikk galt.');
 		} finally {
@@ -444,10 +421,9 @@
 								{/each}
 							</div>
 						{:else}
-							<div class="flex items-center gap-2 text-sm text-base-content/50">
-								<span class="loading loading-spinner loading-xs"></span>
-								Laster eiere fra Matrikkel...
-							</div>
+							<p class="text-xs text-base-content/50">
+								Fant ingen eiere i Matrikkel. Eierbalanser kan legges inn senere under Rapporter.
+							</p>
 						{/if}
 
 						{#if submitError}
@@ -468,10 +444,10 @@
 					</p>
 
 					{#if flats.length === 0}
-						<div class="flex flex-col items-center gap-3 py-8">
-							<span class="loading loading-spinner loading-lg text-primary"></span>
-							<p class="text-sm text-base-content/50">Henter seksjoner fra Matrikkel...</p>
+						<div role="alert" class="alert alert-warning alert-soft mb-4">
+							<span>Fant ingen seksjoner i Matrikkel for denne adressen, så husleie kan ikke settes nå.</span>
 						</div>
+						<button onclick={() => goto('/dashboard')} class="btn btn-primary w-full">Gå til oversikten</button>
 					{:else}
 						<div class="flex flex-col gap-4">
 							<label class="flex items-center gap-2 text-sm cursor-pointer">
