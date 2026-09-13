@@ -1,12 +1,15 @@
 import { Resend } from 'resend';
 import { env } from '$env/dynamic/private';
+import { building } from '$app/environment';
 
-if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
+if (!building && !env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
 
-const resend = new Resend(env.RESEND_API_KEY);
+// Created on first use: the Resend constructor throws without a key, which breaks the build
+let resend: Resend | undefined;
+const client = () => (resend ??= new Resend(env.RESEND_API_KEY));
 
 export async function sendVerificationEmail(opts: { to: string; url: string }) {
-	await resend.emails.send({
+	await client().emails.send({
 		from: 'onboarding@resend.dev',
 		to: opts.to,
 		subject: 'Bekreft e-postadressen din',
@@ -26,7 +29,7 @@ export async function sendInviteEmail(opts: {
 	role: string;
 	acceptUrl: string;
 }) {
-	await resend.emails.send({
+	await client().emails.send({
 		from: 'onboarding@resend.dev',
 		to: opts.to,
 		subject: `You've been invited to ${opts.organizationName}`,

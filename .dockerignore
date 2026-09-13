@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.claude
+.DS_Store
+node_modules
+.svelte-kit
+build
+.env
+.env.*
+csv
+*.csv
+Dockerfile
+compose.yml

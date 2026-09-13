@@ -8,13 +8,19 @@ import {env} from '$env/dynamic/private';
 import {sendInviteEmail, sendVerificationEmail} from './email';
 import {and, eq} from "drizzle-orm";
 import {DEFAULT_ACCOUNTS} from './default-accounts';
+import {building} from '$app/environment';
 
-if (!env.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is not set');
-if (!env.GOOGLE_CLIENT_SECRET) throw new Error('GOOGLE_CLIENT_SECRET is not set');
-if (!env.ORIGIN) throw new Error('ORIGIN is not set');
+if (!building) {
+    if (!env.GOOGLE_CLIENT_ID) throw new Error('GOOGLE_CLIENT_ID is not set');
+    if (!env.GOOGLE_CLIENT_SECRET) throw new Error('GOOGLE_CLIENT_SECRET is not set');
+    if (!env.ORIGIN) throw new Error('ORIGIN is not set');
+    if (!env.BETTER_AUTH_SECRET) throw new Error('BETTER_AUTH_SECRET is not set');
+}
 
 export const auth = betterAuth({
     baseURL: env.ORIGIN,
+    // better-auth rejects a missing secret when NODE_ENV=production, which includes `vite build`
+    secret: building ? 'build-time-placeholder-never-used-at-runtime' : env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {
         provider: 'pg',
         schema: {
