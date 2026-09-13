@@ -55,6 +55,8 @@ Route groups enforce access:
 - Resolve the tenant with `requireOrgId()` (or `requireSession()`) from `$lib/server/tenant`. Both read `locals.session` via `getRequestEvent()`, so they work in remote functions, `+server.ts` and `+page.server.ts` alike, and throw `error(401)`/`error(403)`. Don't call `auth.api.getSession` again; the hook already did.
 - Pages call the query directly (`const data = get_x()`) and render it inside `{#await data}` with a daisyUI `loading-spinner`.
 - Mutations use single-flight updates: `command({...}).updates(theQuery)`. Only call `query.refresh()` server-side (inside the command) when the refreshed query isn't the one the caller is awaiting.
+- Expected failures use `error(status, 'norsk melding')` from `@sveltejs/kit`. A plain `throw new Error(...)` reaches the client as "Internal Error" (SvelteKit hides non-HttpError messages), so keep it for real bugs.
+- On the client, remote functions reject with `HttpError`, which is **not** an `Error`. Show messages with `errorMessage(err)` from `$lib/notify.svelte`. A command fired without a `catch` still surfaces: the root layout turns unhandled rejections into a toast via `showError`.
 - `+page.server.ts` / `+server.ts` exist only where remote functions can't reach: redirect-only loads (`transaksjoner/+page.server.ts` → latest OPEN period) and binary responses (PDF reports under `rapporter/[year]/`).
 
 ### Money is integer øre, everywhere

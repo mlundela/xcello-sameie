@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { errorMessage } from '$lib/notify.svelte';
     import {get_flats} from './flats.remote';
 
     const flats = get_flats();
@@ -76,7 +77,7 @@
 
     {:catch err}
         <div role="alert" class="alert alert-error">
-            <span>{err.message}</span>
+            <span>{errorMessage(err)}</span>
         </div>
     {/await}
 </main>

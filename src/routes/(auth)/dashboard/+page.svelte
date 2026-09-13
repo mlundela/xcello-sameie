@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { get_dashboard_data } from './dashboard.remote';
 
 	const data = get_dashboard_data();
@@ -81,6 +82,6 @@
 			{/if}
 		{/if}
 	{:catch err}
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}
 </main>

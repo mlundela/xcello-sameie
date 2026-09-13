@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
@@ -142,7 +143,7 @@ function detectAndParse(buf: Buffer): ParsedRow[] {
 	// BN Bank: Utfø rt dato ... (first field starts with "Utf")
 	if (firstField.startsWith('Utf')) return parseBNBank(lines);
 
-	throw new Error('Ukjent bankformat');
+	error(400, 'Ukjent bankformat');
 }
 
 export const get_transactions = query(
@@ -212,7 +213,7 @@ export const get_transaction = query(
 			.innerJoin(bankStatement, eq(bankStatement.id, bankTransaction.bankStatementId))
 			.where(and(eq(bankTransaction.id, id), eq(bankTransaction.organizationId, orgId)))
 			.limit(1);
-		if (!row) throw new Error('Transaksjon ikke funnet');
+		if (!row) error(404, 'Transaksjon ikke funnet');
 		return row;
 	}
 );
@@ -247,7 +248,7 @@ export const import_csv = command(
 		const csvText = decodeBuffer(buf);
 		const parsed = detectAndParse(buf);
 
-		if (parsed.length === 0) throw new Error('Filen inneholder ingen transaksjoner');
+		if (parsed.length === 0) error(400, 'Filen inneholder ingen transaksjoner');
 
 		// Validate that each year in the CSV has an OPEN accounting period
 		const years = [...new Set(parsed.map((r) => parseInt(r.date.substring(0, 4))))];
@@ -264,7 +265,7 @@ export const import_csv = command(
 		const openYears = new Set(openPeriods.map((p) => p.year));
 		const missingYears = years.filter((y) => !openYears.has(y));
 		if (missingYears.length > 0) {
-			throw new Error(`Ingen åpen regnskapsperiode for år: ${missingYears.join(', ')}`);
+			error(400, `Ingen åpen regnskapsperiode for år: ${missingYears.join(', ')}`);
 		}
 
 		// Fetch existing transactions to detect duplicates
@@ -404,7 +405,7 @@ export const match_transaction = command(
 		const orgId = requireOrgId();
 		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
-		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
+		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
 		await db.transaction(async (tx) => {
 			await deleteBankAutoVoucher(tx, transactionId);
 			const [row] = await tx
@@ -418,7 +419,7 @@ export const match_transaction = command(
 				.from(bankTransaction)
 				.where(eq(bankTransaction.id, transactionId))
 				.limit(1);
-			if (!row || row.organizationId !== orgId) throw new Error('Transaksjon ikke funnet');
+			if (!row || row.organizationId !== orgId) error(404, 'Transaksjon ikke funnet');
 			await tx
 				.update(bankTransaction)
 				.set({ matchedOwnerId: ownerId, ledgerAccountId, status: 'MATCHED' })
@@ -448,7 +449,7 @@ export const create_rule_and_apply = command(
 		const orgId = requireOrgId();
 		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
-		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
+		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
 		const matched = await db.transaction(async (tx) => {
 			await tx
 				.insert(matchingRule)
@@ -557,7 +558,7 @@ export const unmatch_transaction = command(
 				.set({ matchedOwnerId: null, ledgerAccountId: null, status: 'UNMATCHED' })
 				.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)))
 				.returning({ id: bankTransaction.id });
-			if (updated.length === 0) throw new Error('Transaksjon ikke funnet');
+			if (updated.length === 0) error(404, 'Transaksjon ikke funnet');
 			await deleteBankAutoVoucher(tx, transactionId);
 		});
 		// Client refreshes via .updates()
@@ -582,7 +583,7 @@ export const categorize_transaction = command(
 				.from(bankTransaction)
 				.where(eq(bankTransaction.id, transactionId))
 				.limit(1);
-			if (!row || row.organizationId !== orgId) throw new Error('Transaksjon ikke funnet');
+			if (!row || row.organizationId !== orgId) error(404, 'Transaksjon ikke funnet');
 			await tx
 				.update(bankTransaction)
 				.set({ ledgerAccountId, matchedOwnerId: null, status: 'CATEGORIZED' })
@@ -643,7 +644,7 @@ export const upload_attachment = command(
 			.from(bankTransaction)
 			.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)))
 			.limit(1);
-		if (!tx) throw new Error('Transaksjon ikke funnet');
+		if (!tx) error(404, 'Transaksjon ikke funnet');
 		await db.insert(attachment).values({
 			id: generateId(),
 			bankTransactionId: transactionId,

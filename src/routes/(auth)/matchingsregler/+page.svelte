@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { get_rules, create_rule, delete_rule } from './matchingsregler.remote';
 
 	const data = get_rules();
@@ -96,6 +97,6 @@
 			</div>
 		</div>
 	{:catch err}
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}
 </main>

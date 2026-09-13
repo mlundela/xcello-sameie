@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { get_accounts, create_account, delete_account, seed_default_accounts } from './kontoplan.remote';
 
 	const accounts = get_accounts();
@@ -128,6 +129,6 @@
 			</div>
 		</div>
 	{:catch err}
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}
 </main>

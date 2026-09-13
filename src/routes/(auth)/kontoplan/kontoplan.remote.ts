@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
@@ -39,7 +40,7 @@ export const delete_account = command(
 			db.select({ n: count() }).from(voucherLine).where(eq(voucherLine.ledgerAccountId, id)),
 			db.select({ n: count() }).from(matchingRule).where(eq(matchingRule.ledgerAccountId, id))
 		]);
-		if (usage.some(([{ n }]) => n > 0)) throw new Error('Kontoen er i bruk og kan ikke slettes');
+		if (usage.some(([{ n }]) => n > 0)) error(409, 'Kontoen er i bruk og kan ikke slettes');
 		await db.delete(ledgerAccount).where(and(eq(ledgerAccount.id, id), eq(ledgerAccount.organizationId, orgId)));
 		await get_accounts().refresh();
 	}
@@ -51,7 +52,7 @@ export const seed_default_accounts = command(v.object({}), async () => {
 		.select({ used: count() })
 		.from(ledgerAccount)
 		.where(eq(ledgerAccount.organizationId, orgId));
-	if (existing[0].used > 0) throw new Error('Kontoplan er allerede satt opp');
+	if (existing[0].used > 0) error(409, 'Kontoplan er allerede satt opp');
 	await db.insert(ledgerAccount).values(
 		DEFAULT_ACCOUNTS.map((a) => ({ id: generateId(), organizationId: orgId, ...a }))
 	);

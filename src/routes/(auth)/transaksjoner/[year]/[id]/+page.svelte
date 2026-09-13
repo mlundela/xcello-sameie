@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
 	import {
 		get_transaction,
@@ -63,7 +64,7 @@
 				content
 			}).updates(attachmentsQuery);
 		} catch (err: unknown) {
-			uploadError = err instanceof Error ? err.message : 'Opplasting feilet';
+			uploadError = errorMessage(err, 'Opplasting feilet');
 		} finally {
 			uploading = false;
 			input.value = '';
@@ -311,6 +312,6 @@
 	</main>
 {:catch err}
 	<div class="max-w-2xl px-6 py-8">
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	</div>
 {/await}

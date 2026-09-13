@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { errorMessage } from '$lib/notify.svelte';
     import {page} from '$app/state';
     import {get_flat, set_payment_responsible} from './flat.remote';
 
@@ -130,7 +131,7 @@
 
     {:catch err}
         <div role="alert" class="alert alert-error">
-            <span>{err.message}</span>
+            <span>{errorMessage(err)}</span>
         </div>
     {/await}
 </main>

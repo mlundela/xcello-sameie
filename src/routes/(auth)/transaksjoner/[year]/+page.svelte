@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import {
 		get_transactions,
 		get_open_periods,
@@ -50,7 +51,7 @@
 			});
 			importResult = await import_csv({ csvBase64: base64, fileName: file.name }).updates(txQuery());
 		} catch (err: unknown) {
-			importError = err instanceof Error ? err.message : 'Ukjent feil';
+			importError = errorMessage(err, 'Ukjent feil');
 		} finally {
 			importing = false;
 			input.value = '';
@@ -303,7 +304,7 @@
 			</div>
 		{/if}
 	{:catch err}
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}
 
 	<dialog bind:this={dialogEl} class="modal">

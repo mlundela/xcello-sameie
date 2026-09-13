@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { query, command, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
 import { auth } from '$lib/server/auth';
@@ -10,7 +11,7 @@ export const get_invitation = query(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
 		const [inv] = await db.select().from(invitation).where(eq(invitation.id, id));
-		if (!inv) throw new Error('Invitation not found');
+		if (!inv) error(404, 'Invitasjonen finnes ikke');
 
 		if (inv.status !== 'pending' || inv.expiresAt < new Date()) {
 			return { expired: true, status: inv.status, invitation: null };

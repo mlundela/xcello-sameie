@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
 	import { get_husleie, set_bulk_rent } from './husleie.remote';
 
@@ -45,7 +46,7 @@
 			await set_bulk_rent({ fromYear, fromMonth, rents });
 			goto('/flats');
 		} catch (err) {
-			error = err instanceof Error ? err.message : 'Feil ved lagring';
+			error = errorMessage(err, 'Feil ved lagring');
 		} finally {
 			saving = false;
 		}
@@ -165,7 +166,7 @@
 						</div>
 					{:catch err}
 						<div role="alert" class="alert alert-error">
-							<span>{err.message}</span>
+							<span>{errorMessage(err)}</span>
 						</div>
 					{/await}
 				{/if}

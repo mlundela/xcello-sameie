@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { get_invitation, accept_invitation } from './invite.remote';
@@ -15,7 +16,7 @@
 			await accept_invitation({ invitationId: page.params.invitationId! });
 			goto('/dashboard');
 		} catch (err) {
-			acceptError = err instanceof Error ? err.message : 'Failed to accept invitation';
+			acceptError = errorMessage(err, 'Failed to accept invitation');
 		} finally {
 			accepting = false;
 		}
@@ -64,7 +65,7 @@
 				{/if}
 			{:catch err}
 				<div role="alert" class="alert alert-error">
-					<span>{err.message}</span>
+					<span>{errorMessage(err)}</span>
 				</div>
 			{/await}
 		</div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
 	import { onDestroy } from 'svelte';
 	import { create_organization, get_setup_flats, get_setup_owners, setup_accounting_periods, set_initial_rent } from './new.remote';
@@ -181,7 +182,7 @@
 			step = 2;
 			startPolling(); // Matrikkel import has started – poll owners immediately
 		} catch (err: unknown) {
-			submitError = err instanceof Error ? err.message : 'Noe gikk galt.';
+			submitError = errorMessage(err, 'Noe gikk galt.');
 		} finally {
 			loading = false;
 		}
@@ -203,7 +204,7 @@
 			});
 			step = 3;
 		} catch (err: unknown) {
-			submitError = err instanceof Error ? err.message : 'Noe gikk galt.';
+			submitError = errorMessage(err, 'Noe gikk galt.');
 		} finally {
 			loading = false;
 		}
@@ -224,7 +225,7 @@
 			await set_initial_rent({ fromYear: startYear, rents });
 			goto('/dashboard');
 		} catch (err: unknown) {
-			submitError = err instanceof Error ? err.message : 'Noe gikk galt.';
+			submitError = errorMessage(err, 'Noe gikk galt.');
 		} finally {
 			loading = false;
 		}

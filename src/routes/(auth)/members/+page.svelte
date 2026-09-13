@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { errorMessage, showError } from '$lib/notify.svelte';
     import {goto} from '$app/navigation';
     import {cancel_invite, get_members_data, invite_member, leave_organization, remove_member} from './members.remote';
 
@@ -21,7 +22,7 @@
             email = '';
             inviteSuccess = true;
         } catch (err) {
-            inviteError = err instanceof Error ? err.message : 'Failed to send invitation';
+            inviteError = errorMessage(err, 'Failed to send invitation');
         } finally {
             loading = false;
         }
@@ -31,7 +32,7 @@
         try {
             await cancel_invite({invitationId});
         } catch (err) {
-            console.error(err);
+            showError(err);
         }
     }
 
@@ -39,7 +40,7 @@
         try {
             await remove_member({memberId});
         } catch (err) {
-            console.error(err);
+            showError(err);
         }
     }
 
@@ -176,7 +177,7 @@
         {/if}
     {:catch err}
         <div role="alert" class="alert alert-error">
-            <span>{err.message}</span>
+            <span>{errorMessage(err)}</span>
         </div>
     {/await}
 </main>

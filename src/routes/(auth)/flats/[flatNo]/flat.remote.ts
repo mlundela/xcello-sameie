@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
@@ -14,7 +15,7 @@ export const get_flat = query(v.object({ flatNo: v.string() }), async ({ flatNo 
 		.where(and(eq(flat.organizationId, orgId), eq(flat.flatNo, flatNo)))
 		.limit(1);
 
-	if (!flatRow) throw new Error('Ikke funnet');
+	if (!flatRow) error(404, 'Ikke funnet');
 
 	const history = await db
 		.select({ ownership: flatOwnership, owner })
@@ -41,7 +42,7 @@ export const set_payment_responsible = command(
 			.from(flat)
 			.where(and(eq(flat.organizationId, orgId), eq(flat.flatNo, flatNo)))
 			.limit(1);
-		if (!flatRow) throw new Error('Ikke funnet');
+		if (!flatRow) error(404, 'Ikke funnet');
 		await db.transaction(async (tx) => {
 			await tx
 				.update(flatOwnership)
@@ -52,7 +53,7 @@ export const set_payment_responsible = command(
 				.set({ isPaymentResponsible: true })
 				.where(and(eq(flatOwnership.flatId, flatRow.id), eq(flatOwnership.ownerId, ownerId)))
 				.returning({ id: flatOwnership.id });
-			if (updated.length === 0) throw new Error('Eieren eier ikke denne leiligheten');
+			if (updated.length === 0) error(404, 'Eieren eier ikke denne leiligheten');
 		});
 		await get_flat({ flatNo }).refresh();
 	}

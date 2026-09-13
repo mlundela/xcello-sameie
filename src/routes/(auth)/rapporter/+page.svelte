@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { errorMessage } from '$lib/notify.svelte';
 	import {
 		get_rapport_years,
 		get_opening_balance,
@@ -145,6 +146,6 @@
 			</div>
 		{/if}
 	{:catch err}
-		<div role="alert" class="alert alert-error">{err.message}</div>
+		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
 	{/await}
 </main>

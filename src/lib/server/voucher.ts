@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { db } from './db';
 import { voucher, voucherLine, ledgerAccount, bankTransaction } from '$lib/schema';
 import { eq, and, sql } from 'drizzle-orm';
@@ -12,7 +13,7 @@ async function getAccountIdByCode(tx: DbOrTx, organizationId: string, code: stri
 		.from(ledgerAccount)
 		.where(and(eq(ledgerAccount.organizationId, organizationId), eq(ledgerAccount.code, code)))
 		.limit(1);
-	if (!row) throw new Error(`Mangler konto ${code} i kontoplanen`);
+	if (!row) error(409, `Mangler konto ${code} i kontoplanen`);
 	return row.id;
 }
 
@@ -50,7 +51,7 @@ export async function createBankAutoVoucher(
 		description: string;
 	}
 ): Promise<string> {
-	if (opts.amountOre === 0) throw new Error('Kan ikke generere bilag for transaksjon med beløp 0');
+	if (opts.amountOre === 0) error(400, 'Kan ikke generere bilag for transaksjon med beløp 0');
 
 	const bankAccountId = await getBankAccountId(tx, opts.organizationId);
 	const fiscalYear = parseInt(opts.date.substring(0, 4));
