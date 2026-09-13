@@ -26,6 +26,12 @@ ENV NODE_ENV=production \
     BODY_SIZE_LIMIT=15M
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/build ./build
+# The migrations themselves: the .sql files plus meta/_journal.json. The
+# migrator that reads them lives in drizzle-orm, already present in
+# node_modules above -- drizzle-kit is NOT needed at runtime and stays a
+# devDependency. Without this COPY the app starts against whatever schema
+# happens to exist, which is how it once served 200s on / with no tables.
+COPY --from=build --chown=node:node /app/drizzle ./drizzle
 COPY --chown=node:node package.json ./
 USER node
 EXPOSE 3000
