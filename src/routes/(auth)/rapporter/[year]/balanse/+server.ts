@@ -2,18 +2,9 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { requireOrgId } from '$lib/server/tenant';
-import {
-	bankTransaction,
-	ledgerAccount,
-	organization,
-	owner,
-	flatOwnership,
-	flat,
-	flatRent,
-	voucher,
-	voucherLine
-} from '$lib/schema';
-import { eq, and, sql, sum, isNull, or, gte, inArray } from 'drizzle-orm';
+import { expectedRentByOwner } from '$lib/server/rent';
+import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
+import { eq, and, sql, sum, inArray } from 'drizzle-orm';
 import { createRequire } from 'module';
 const pdfmake = createRequire(import.meta.url)('pdfmake');
 
@@ -36,24 +27,6 @@ function formatKr(oreVal: number): string {
 	const kr = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 	const øre = (abs % 100).toString().padStart(2, '0');
 	return `${sign}${kr},${øre} kr`;
-}
-
-function findRentForMonth(
-	rents: { flatId: string; fromYear: number; fromMonth: number; toYear: number | null; toMonth: number | null; amount: number }[],
-	flatId: string,
-	year: number,
-	month: number
-): number {
-	const rent = rents.find((r) => {
-		if (r.flatId !== flatId) return false;
-		const fromOk = r.fromYear < year || (r.fromYear === year && r.fromMonth <= month);
-		const toOk =
-			r.toYear === null ||
-			r.toYear > year ||
-			(r.toYear === year && r.toMonth !== null && r.toMonth >= month);
-		return fromOk && toOk;
-	});
-	return rent?.amount ?? 0;
 }
 
 function sectionLayout(bodyLength: number) {
@@ -81,9 +54,6 @@ export const GET: RequestHandler = async ({ params }) => {
 		.where(and(eq(voucher.organizationId, orgId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING')))
 		.limit(1);
 	if (!openingVoucher) throw error(400, `Ingen inngående saldo registrert for ${year}. Legg den inn på rapporter-siden.`);
-
-	const today = new Date();
-	const monthsToCount = year < today.getFullYear() ? 12 : today.getMonth() + 1;
 
 	const fiscalYearFilter = and(
 		eq(voucher.organizationId, orgId),
@@ -122,50 +92,8 @@ export const GET: RequestHandler = async ({ params }) => {
 	const loanClosing = ore(loanRow?.delta ?? null);
 
 	// --- Fordring / forhåndsbetalt per eier ---
-	const ownerships = await db
-		.select({
-			ownerId: owner.id,
-			flatId: flat.id,
-			flatNo: flat.flatNo,
-			fromDate: flatOwnership.fromDate,
-			toDate: flatOwnership.toDate
-		})
-		.from(flatOwnership)
-		.innerJoin(flat, eq(flat.id, flatOwnership.flatId))
-		.innerJoin(owner, eq(owner.id, flatOwnership.ownerId))
-		.where(
-			and(
-				eq(flat.organizationId, orgId),
-				eq(flatOwnership.isPaymentResponsible, true),
-				or(isNull(flatOwnership.toDate), gte(flatOwnership.toDate, `${year}-01-01`))
-			)
-		);
-
-	const flatIds = [...new Set(ownerships.map((o) => o.flatId))];
-	const rents = flatIds.length > 0
-		? await db
-			.select({
-				flatId: flatRent.flatId,
-				fromYear: flatRent.fromYear,
-				fromMonth: flatRent.fromMonth,
-				toYear: flatRent.toYear,
-				toMonth: flatRent.toMonth,
-				amount: flatRent.amount
-			})
-			.from(flatRent)
-			.where(inArray(flatRent.flatId, flatIds))
-		: [];
-
-	// Per-owner expected for this year
-	const ownerIds = [...new Set(ownerships.map((o) => o.ownerId))];
-	const expectedPerOwner = new Map<string, number>();
-	for (const o of ownerships) {
-		let expected = expectedPerOwner.get(o.ownerId) ?? 0;
-		for (let m = 1; m <= monthsToCount; m++) {
-			expected += findRentForMonth(rents, o.flatId, year, m);
-		}
-		expectedPerOwner.set(o.ownerId, expected);
-	}
+	const { expected: expectedPerOwner } = await expectedRentByOwner(orgId, year);
+	const ownerIds = [...expectedPerOwner.keys()];
 
 	// Per-owner: alle bilagslinjer med ownerId inkl. OPENING-bilag (åpningsbalanse)
 	// OPENING-bilagets 1500-linjer (debet) gir negativt bidrag = fordring ved årets start

@@ -2,8 +2,9 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { requireOrgId } from '$lib/server/tenant';
-import { bankTransaction, ledgerAccount, organization, flatOwnership, flat, flatRent, voucher, voucherLine } from '$lib/schema';
-import { eq, and, sql, isNull, or, gte, inArray } from 'drizzle-orm';
+import { expectedRentByOwner } from '$lib/server/rent';
+import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { createRequire } from 'module';
 const pdfmake = createRequire(import.meta.url)('pdfmake');
 
@@ -28,24 +29,6 @@ function formatKr(oreVal: number): string {
 	return `${sign}${kr},${øre} kr`;
 }
 
-function findRentForMonth(
-	rents: { flatId: string; fromYear: number; fromMonth: number; toYear: number | null; toMonth: number | null; amount: number }[],
-	flatId: string,
-	year: number,
-	month: number
-): number {
-	const rent = rents.find((r) => {
-		if (r.flatId !== flatId) return false;
-		const fromOk = r.fromYear < year || (r.fromYear === year && r.fromMonth <= month);
-		const toOk =
-			r.toYear === null ||
-			r.toYear > year ||
-			(r.toYear === year && r.toMonth !== null && r.toMonth >= month);
-		return fromOk && toOk;
-	});
-	return rent?.amount ?? 0;
-}
-
 // Thin line only below header row and above sum row
 function sectionLayout(bodyLength: number) {
 	return {
@@ -65,43 +48,9 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
 
-	const today = new Date();
-	const monthsToCount = year < today.getFullYear() ? 12 : today.getMonth() + 1;
-
-	// Fetch payment-responsible ownerships active in the year
-	const ownerships = await db
-		.select({ flatId: flatOwnership.flatId })
-		.from(flatOwnership)
-		.innerJoin(flat, eq(flat.id, flatOwnership.flatId))
-		.where(and(
-			eq(flat.organizationId, orgId),
-			eq(flatOwnership.isPaymentResponsible, true),
-			or(isNull(flatOwnership.toDate), gte(flatOwnership.toDate, `${year}-01-01`))
-		));
-
-	const flatIds = [...new Set(ownerships.map((o) => o.flatId))];
-
-	const rents = flatIds.length > 0
-		? await db
-			.select({
-				flatId: flatRent.flatId,
-				fromYear: flatRent.fromYear,
-				fromMonth: flatRent.fromMonth,
-				toYear: flatRent.toYear,
-				toMonth: flatRent.toMonth,
-				amount: flatRent.amount
-			})
-			.from(flatRent)
-			.where(inArray(flatRent.flatId, flatIds))
-		: [];
-
-	// Calculate expected 3600 income from rent rates
-	let expected3600 = 0;
-	for (const o of ownerships) {
-		for (let m = 1; m <= monthsToCount; m++) {
-			expected3600 += findRentForMonth(rents, o.flatId, year, m);
-		}
-	}
+	// Expected 3600 income from rent rates (accrual basis)
+	const { expected } = await expectedRentByOwner(orgId, year);
+	const expected3600 = [...expected.values()].reduce((s, v) => s + v, 0);
 
 	// Aggregate voucher lines per ledger account for the fiscal year.
 	// Net = credit - debit, so INCOME accounts show positive, EXPENSE accounts show negative.
