@@ -1,23 +1,31 @@
+import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireOrgId } from '$lib/server/tenant';
-import { matchingRule, owner, flat, flatOwnership } from '$lib/schema';
+import { matchingRule, owner, flat, flatOwnership, ledgerAccount } from '$lib/schema';
 import { eq, isNull, and } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 
 export const get_rules = query(async () => {
 	const orgId = requireOrgId();
 
+	// Owner rules and expense (ledger account) rules; exactly one of the two joins matches per row
 	const rules = await db
 		.select({
 			id: matchingRule.id,
 			pattern: matchingRule.pattern,
 			ownerId: matchingRule.ownerId,
-			ownerName: owner.name
+			ownerName: owner.name,
+			ledgerAccountId: matchingRule.ledgerAccountId,
+			accountCode: ledgerAccount.code,
+			accountName: ledgerAccount.name,
+			receiptNotRequired: matchingRule.receiptNotRequired,
+			userDescription: matchingRule.userDescription
 		})
 		.from(matchingRule)
-		.innerJoin(owner, eq(owner.id, matchingRule.ownerId))
+		.leftJoin(owner, eq(owner.id, matchingRule.ownerId))
+		.leftJoin(ledgerAccount, eq(ledgerAccount.id, matchingRule.ledgerAccountId))
 		.where(eq(matchingRule.organizationId, orgId))
 		.orderBy(matchingRule.pattern);
 
@@ -35,12 +43,25 @@ export const get_rules = query(async () => {
 export const create_rule = command(
 	v.object({
 		pattern: v.pipe(v.string(), v.minLength(1)),
-		ownerId: v.pipe(v.string(), v.minLength(1))
+		ownerId: v.optional(v.pipe(v.string(), v.minLength(1))),
+		ledgerAccountId: v.optional(v.pipe(v.string(), v.minLength(1))),
+		receiptNotRequired: v.optional(v.boolean(), false),
+		userDescription: v.optional(v.string())
 	}),
-	async ({ pattern, ownerId }) => {
+	async ({ pattern, ownerId, ledgerAccountId, receiptNotRequired, userDescription }) => {
 		const orgId = requireOrgId();
-		await assertInOrg(owner, [ownerId], orgId);
-		await db.insert(matchingRule).values({ id: generateId(), organizationId: orgId, pattern, ownerId });
+		if (!ownerId === !ledgerAccountId) error(400, 'Velg enten en eier eller en konto');
+		if (ownerId) await assertInOrg(owner, [ownerId], orgId);
+		if (ledgerAccountId) await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
+		await db.insert(matchingRule).values({
+			id: generateId(),
+			organizationId: orgId,
+			pattern,
+			ownerId,
+			ledgerAccountId,
+			receiptNotRequired,
+			userDescription: userDescription || null
+		});
 		await get_rules().refresh();
 	}
 );

@@ -390,6 +390,14 @@ export const import_csv = command(
 	}
 );
 
+/**
+ * ILIKE pattern for "description contains `pattern`", matching the case-insensitive substring check
+ * import_csv uses. Escapes LIKE metacharacters so a rule like "100%" doesn't act as a wildcard.
+ */
+function containsPattern(pattern: string): string {
+	return `%${pattern.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
+}
+
 async function get3600AccountId(orgId: string): Promise<string | null> {
 	const [account] = await db
 		.select({ id: ledgerAccount.id })
@@ -467,8 +475,8 @@ export const create_rule_and_apply = command(
 					and(
 						eq(bankTransaction.organizationId, orgId),
 						eq(bankTransaction.status, 'UNMATCHED'),
-						sql`${bankTransaction.amountOre} > 0`,
-						ilike(bankTransaction.description, `%${pattern}%`)
+						// Like import_csv: owner rules cover payments and refunds alike
+						ilike(bankTransaction.description, containsPattern(pattern))
 					)
 				)
 				.returning({
@@ -522,7 +530,7 @@ export const create_expense_rule_and_apply = command(
 						eq(bankTransaction.organizationId, orgId),
 						eq(bankTransaction.status, 'UNMATCHED'),
 						sql`${bankTransaction.amountOre} < 0`,
-						ilike(bankTransaction.description, `%${pattern}%`)
+						ilike(bankTransaction.description, containsPattern(pattern))
 					)
 				)
 				.returning({
