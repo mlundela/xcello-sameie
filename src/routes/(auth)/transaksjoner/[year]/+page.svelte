@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import {
 		get_transactions,
@@ -56,10 +57,6 @@
 			importing = false;
 			input.value = '';
 		}
-	}
-
-	function formatKr(ore: number) {
-		return (ore / 100).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr';
 	}
 
 	const statusLabel: Record<string, string> = {

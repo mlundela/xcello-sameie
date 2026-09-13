@@ -60,7 +60,7 @@ Route groups enforce access:
 - `+page.server.ts` / `+server.ts` exist only where remote functions can't reach: redirect-only loads (`transaksjoner/+page.server.ts` → latest OPEN period) and binary responses (PDF reports under `rapporter/[year]/`).
 
 ### Money is integer øre, everywhere
-Columns are named `*Ore` / `*_ore` and are `integer`. Format for display with `Math.floor(ore / 100)` + `nb-NO` locale, never floats. CSV amounts are parsed to kroner then `Math.round(amount * 100)`.
+Columns are named `*Ore` / `*_ore` and are `integer`. Format with `formatKr(ore)` (or `formatKr(ore, { decimals: false })`) and parse user input with `krToOre(text)` from `$lib/money`, in the UI and the PDFs alike. Don't hand-roll `Math.floor(ore / 100)`: it rounds negative amounts away from zero. CSV amounts are parsed to kroner then `Math.round(amount * 100)`.
 
 ### The voucher (bilag) layer is the accounting source of truth
 `src/lib/server/voucher.ts` is the **only** place vouchers are written. It's a hidden data layer: the UI still talks about bank transactions and one account/owner per transaction, but reports aggregate `voucher_line`, not `bank_transaction`.

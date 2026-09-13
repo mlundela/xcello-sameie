@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { krToOre } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
 	import { create_organization, get_setup_flats, get_setup_owners, setup_accounting_periods, set_initial_rent } from './new.remote';
@@ -42,11 +43,6 @@
 	let flats = $state<Flat[]>([]);
 	let amounts = $state<Record<string, string>>({});
 	let autoFill = $state(true);
-
-	function krToOre(kr: string): number {
-		const cleaned = kr.replace(/\s/g, '').replace(',', '.');
-		return Math.round((parseFloat(cleaned) || 0) * 100);
-	}
 
 	function fillFromShare(changedFlatId: string) {
 		if (!autoFill) return;

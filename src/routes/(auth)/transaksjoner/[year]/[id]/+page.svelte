@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
 	import {
@@ -35,10 +36,6 @@
 			editingDesc = false;
 		});
 	});
-
-	function formatKr(ore: number) {
-		return (ore / 100).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr';
-	}
 
 	async function handleFileChange(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;

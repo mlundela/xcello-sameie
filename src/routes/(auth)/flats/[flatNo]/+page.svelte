@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { formatKr } from '$lib/money';
     import { errorMessage } from '$lib/notify.svelte';
     import {page} from '$app/state';
     import {get_flat, set_payment_responsible} from './flat.remote';
@@ -120,7 +121,7 @@
                                         <span class="badge badge-success badge-soft badge-sm">Gjeldende</span>
                                     {/if}
                                 </td>
-                                <td class="tabular-nums">{Math.floor(r.amount / 100).toLocaleString('nb-NO')} kr</td>
+                                <td class="tabular-nums">{formatKr(r.amount, { decimals: false })}</td>
                             </tr>
                         {/each}
                         </tbody>

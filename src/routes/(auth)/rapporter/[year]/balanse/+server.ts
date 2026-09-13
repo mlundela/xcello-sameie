@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
+import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
 import { expectedRentByOwner } from '$lib/server/rent';
 import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
@@ -19,14 +20,6 @@ pdfmake.addFonts({
 
 function ore(val: string | null): number {
 	return parseInt(val ?? '0');
-}
-
-function formatKr(oreVal: number): string {
-	const sign = oreVal < 0 ? '-' : '';
-	const abs = Math.abs(oreVal);
-	const kr = Math.floor(abs / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-	const øre = (abs % 100).toString().padStart(2, '0');
-	return `${sign}${kr},${øre} kr`;
 }
 
 function sectionLayout(bodyLength: number) {

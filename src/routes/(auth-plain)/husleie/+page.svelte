@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
 	import { get_husleie, set_bulk_rent } from './husleie.remote';
@@ -125,7 +126,7 @@
 										<td class="tabular-nums">{f.shareNumerator}/{f.shareDenominator}</td>
 										<td class="tabular-nums text-base-content/60 text-sm">
 											{#if f.currentRentAmount !== null}
-												{(f.currentRentAmount / 100).toLocaleString('nb-NO')} kr
+												{formatKr(f.currentRentAmount, { decimals: false })}
 											{:else}
 												<span class="text-base-content/30">—</span>
 											{/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { krToOre } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import {
 		get_rapport_years,
@@ -9,11 +10,6 @@
 	} from './rapporter.remote';
 
 	const years = get_rapport_years();
-
-	function krToOre(kr: string): number {
-		const cleaned = kr.replace(/\s/g, '').replace(',', '.');
-		return Math.round(parseFloat(cleaned) * 100) || 0;
-	}
 
 	function oreToKr(ore: number): string {
 		return (ore / 100).toFixed(2).replace('.', ',');

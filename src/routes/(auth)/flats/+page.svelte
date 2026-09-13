@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { formatKr } from '$lib/money';
     import { errorMessage } from '$lib/notify.svelte';
     import {get_flats} from './flats.remote';
 
@@ -52,7 +53,7 @@
                                 </td>
                                 <td class="tabular-nums">
                                     {#if f.currentRentAmount !== null}
-                                        {Math.floor(f.currentRentAmount / 100).toLocaleString('nb-NO')} kr
+                                        {formatKr(f.currentRentAmount, { decimals: false })}
                                     {:else}
                                         <span class="text-base-content/40">—</span>
                                     {/if}

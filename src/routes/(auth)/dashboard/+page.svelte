@@ -1,12 +1,9 @@
 <script lang="ts">
+	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { get_dashboard_data } from './dashboard.remote';
 
 	const data = get_dashboard_data();
-
-	function formatKr(ore: number) {
-		return Math.floor(ore / 100).toLocaleString('nb-NO') + ' kr';
-	}
 </script>
 
 <main class="max-w-4xl px-6 py-8 flex flex-col gap-6">
@@ -64,14 +61,14 @@
 											</span>
 											</p>
 										</td>
-										<td class="text-right font-mono text-base-content/70">{formatKr(row.expectedOre)}</td>
-										<td class="text-right font-mono">{formatKr(row.actualOre)}</td>
+										<td class="text-right font-mono text-base-content/70">{formatKr(row.expectedOre, { decimals: false })}</td>
+										<td class="text-right font-mono">{formatKr(row.actualOre, { decimals: false })}</td>
 										<td
 											class="text-right font-mono"
 											class:text-success={row.balanceOre >= 0}
 											class:text-error={row.balanceOre < 0}
 										>
-											{row.balanceOre >= 0 ? '+' : ''}{formatKr(row.balanceOre)}
+											{row.balanceOre >= 0 ? '+' : ''}{formatKr(row.balanceOre, { decimals: false })}
 										</td>
 									</tr>
 								{/each}
