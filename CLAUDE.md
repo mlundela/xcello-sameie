@@ -23,7 +23,7 @@ bun run db:seed                  # src/lib/server/seed.ts — demo users/orgs on
 
 There is **no test framework**. "Verification before done" means `bun run check` plus exercising the flow against the local DB (`psql`, `db:studio`, or the dev server). Don't claim tests pass; don't add a test runner unless asked.
 
-`.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, `GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `MATRIKKEL_API_URL`. Note `MATRIKKEL_API_URL` points at a **separate external service not in compose.yml**; when it's unset or unreachable, org creation logs the failure and continues with the chart of accounts but no flats or owners.
+`.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, `GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `MATRIKKEL_API_URL`. `EMAIL_FROM` must be on a domain verified in Resend; `onboarding@resend.dev` only delivers to the Resend account owner, which is fine for local dev only. Note `MATRIKKEL_API_URL` points at a **separate external service not in compose.yml**; when it's unset or unreachable, org creation logs the failure and continues with the chart of accounts but no flats or owners.
 
 ## Domain
 

@@ -2,15 +2,22 @@ import { Resend } from 'resend';
 import { env } from '$env/dynamic/private';
 import { building } from '$app/environment';
 
-if (!building && !env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
+if (!building) {
+	if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
+	// Must be on a domain verified in Resend: the shared onboarding@resend.dev sender only
+	// delivers to the Resend account owner, so signup verification and invites fail for everyone else
+	if (!env.EMAIL_FROM) throw new Error('EMAIL_FROM is not set');
+}
 
 // Created on first use: the Resend constructor throws without a key, which breaks the build
 let resend: Resend | undefined;
 const client = () => (resend ??= new Resend(env.RESEND_API_KEY));
 
+const ROLE_LABELS: Record<string, string> = { owner: 'eier', admin: 'administrator', member: 'medlem' };
+
 export async function sendVerificationEmail(opts: { to: string; url: string }) {
 	await client().emails.send({
-		from: 'onboarding@resend.dev',
+		from: env.EMAIL_FROM!,
 		to: opts.to,
 		subject: 'Bekreft e-postadressen din',
 		html: `
@@ -30,15 +37,15 @@ export async function sendInviteEmail(opts: {
 	acceptUrl: string;
 }) {
 	await client().emails.send({
-		from: 'onboarding@resend.dev',
+		from: env.EMAIL_FROM!,
 		to: opts.to,
-		subject: `You've been invited to ${opts.organizationName}`,
+		subject: `Du er invitert til ${opts.organizationName}`,
 		html: `
-			<p>Hi,</p>
-			<p><strong>${opts.inviterName}</strong> has invited you to join
-			<strong>${opts.organizationName}</strong> as a <em>${opts.role}</em>.</p>
-			<p><a href="${opts.acceptUrl}">Accept invitation</a></p>
-			<p>This link expires in 48 hours.</p>
+			<p>Hei,</p>
+			<p><strong>${opts.inviterName}</strong> har invitert deg til
+			<strong>${opts.organizationName}</strong> som <em>${ROLE_LABELS[opts.role] ?? opts.role}</em>.</p>
+			<p><a href="${opts.acceptUrl}">Godta invitasjonen</a></p>
+			<p>Lenken utløper etter 48 timer.</p>
 		`
 	});
 }

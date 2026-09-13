@@ -22,6 +22,7 @@ docker run -p 3000:3000 \
   -e BETTER_AUTH_SECRET=$(openssl rand -base64 32) \
   -e GOOGLE_CLIENT_ID=... -e GOOGLE_CLIENT_SECRET=... \
   -e RESEND_API_KEY=... \
+  -e EMAIL_FROM="Xcello Sameie <noreply@your-verified-domain>" \
   -e MATRIKKEL_API_URL=... \
   xcello-sameie
 ```
