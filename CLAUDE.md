@@ -9,14 +9,13 @@ Package manager is **bun** (`packageManager: bun@1.2.9`).
 ```bash
 docker compose up -d db          # Postgres 17 on :5432 (xcello/xcello/xcello)
 bun install
-bun run dev                      # Vite dev server on :5173
+bun run dev                      # Vite dev server on :5173; applies pending migrations on start
+docker compose up --build        # app (Docker image, :3000) + db, reading .env
 
 bun run check                    # svelte-kit sync + svelte-check — the only automated verification in this repo
 bun run build && bun run preview
 
 bun run db:generate              # drizzle-kit generate — new migration from src/lib/schema.ts
-bun run db:migrate               # apply journalled migrations
-bun run db:push                  # push schema straight to DB (used in dev instead of migrate)
 bun run db:studio
 bun run db:seed                  # src/lib/server/seed.ts — demo users/orgs only, needs DATABASE_URL in env
 ```
@@ -35,7 +34,7 @@ Accounting + property management for Norwegian housing cooperatives (*sameier*).
 
 ## Architecture
 
-SvelteKit 2 / Svelte 5 (runes) · Drizzle ORM + postgres-js · better-auth 1.5 · Tailwind 4 + daisyUI 5 (`coffee` theme, 18px base) · pdfmake for reports · valibot for input schemas.
+SvelteKit 2 / Svelte 5 (runes) · Drizzle ORM + postgres-js · better-auth 1.7 · Tailwind 4 + daisyUI 5 (`coffee` theme, 18px base) · pdfmake for reports · valibot for input schemas.
 
 ### Multi-tenancy runs through better-auth's organization plugin
 One `organization` = one sameie. There is no separate tenant table: `session.activeOrganizationId` **is** the tenant context, set in the `databaseHooks.session.create.before` hook in `src/lib/server/auth.ts` (first membership wins). Every domain table carries `organizationId` and every query must filter on it.
@@ -68,7 +67,7 @@ Columns are named `*Ore` / `*_ore` and are `integer`. Format with `formatKr(ore)
 - `createBankAutoVouchers` (batch; `createBankAutoVoucher` for one) — 2 lines each, one side always bank account `1920`; sets `bankTransaction.voucherId`. Pass all rows of an operation in one call: it does a fixed number of statements however many rows there are.
 - Voucher numbers are reserved under a `pg_advisory_xact_lock` per (org, fiscal year), so every voucher writer takes a transaction (`Tx`), never bare `db`.
 - `deleteBankAutoVoucher` — call it *before* re-categorising a transaction, then create the new voucher; every mutation path in `banktransaksjoner.remote.ts` does this inside one `db.transaction`.
-- `createOpeningVoucher` / `readOpeningState` — opening balances are `source: 'OPENING'` vouchers (they used to be their own tables; see migration 0006). Writing one deletes and recreates the year's OPENING voucher, so read current state first and pass the parts you aren't changing.
+- `createOpeningVoucher` / `readOpeningState` — opening balances are `source: 'OPENING'` vouchers. Writing one deletes and recreates the year's OPENING voucher, so read current state first and pass the parts you aren't changing.
 - Invariants: `SUM(debitOre) === SUM(creditOre)` per voucher; `voucherNumber` sequential per `(organizationId, fiscalYear)`; fiscal year derives from the voucher date.
 
 Ledger account **codes are hardcoded in logic** and looked up per org: `1920` bank, `1500` receivable from owners, `2050` equity, `2400` long-term debt, `2770` prepaid fellesutgifter, `3600` felleskostnader (income). Missing accounts throw `Mangler konto NNNN i kontoplanen` — a common failure after adding a table/feature against an org seeded before `DEFAULT_ACCOUNTS` changed.
@@ -78,8 +77,8 @@ Ledger account **codes are hardcoded in logic** and looked up per org: `1920` ba
 
 Transaction status is `UNMATCHED | MATCHED | CATEGORIZED`. Receipts (`attachment`) are stored base64 in Postgres; `receiptNotRequired` defaults true for inflows.
 
-### Migrations are inconsistent — check before generating
-`drizzle/` mixes drizzle-kit output with hand-written SQL, and the hand-written files (`0003_expense_matching_rules.sql`, `0004_receipt_not_required_rule.sql`, `0005_user_description_rule.sql`, `0006_opening_balance.sql`) are **not in `meta/_journal.json`** — they were applied out of band, so `db:migrate` alone will not reproduce this schema. In dev, prefer `db:push` and reseeding. Per `tasks/lessons.md`: this project has no production data, so **do not write backfill scripts** — drop and recreate instead.
+### Migrations run at server start
+`drizzle/` holds drizzle-kit output only: a regenerated baseline (`0000_*.sql`) plus `meta/_journal.json`. `src/lib/server/migrate.ts` applies pending migrations before `hooks.server.ts` serves the first request, in `bun run dev` and in the Docker image (which copies `drizzle/`). To change the schema, edit `src/lib/schema.ts` and run `bun run db:generate`; don't hand-write SQL outside the journal, and don't use `drizzle-kit push`. A database created by `push` (or by an older migration set) fails the startup migrator with `relation "…" already exists`: drop the `public` and `drizzle` schemas, restart, then `bun run db:seed`. Per `tasks/lessons.md`: this project has no production data, so **do not write backfill scripts** — drop and recreate instead.
 
 ## Working agreements
 
@@ -120,4 +119,4 @@ Transaction status is `UNMATCHED | MATCHED | CATEGORIZED`. Receipts (`attachment
 - Always prefer the better-auth API over hand-written SQL whenever possible
 - Minimize the amount of code generated.
 - Keep `compose.yml` able to run every component the app needs.
-- Update README.md after completing an implementation (it is currently empty)
+- Update README.md after completing an implementation

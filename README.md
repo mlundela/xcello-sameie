@@ -1,18 +1,44 @@
 # xcello-sameie
 
-Accounting and property management for Norwegian housing cooperatives (sameier). SvelteKit, Drizzle, Postgres, better-auth.
+Accounting and property management for Norwegian housing cooperatives (sameier): bank statement import and reconciliation, felleskostnader per owner, receipts, and year-end reports (resultatregnskap and balanse) as PDF. SvelteKit, Drizzle, Postgres, better-auth.
 
 ## Development
 
 ```bash
-cp .env.example .env
+cp .env.example .env        # fill in secrets; see below
 docker compose up -d db
 bun install
-bun run db:push
-bun run dev
+bun run dev                 # http://localhost:5173, applies pending migrations on start
+bun run db:seed             # optional: demo users admin@example.com / user@example.com, password "password123"
 ```
 
+`bun run check` (svelte-check) is the automated verification and runs in CI on every pull request.
+
+### Environment
+
+| Variable | |
+|---|---|
+| `DATABASE_URL` | Postgres connection string |
+| `ORIGIN` | Public URL of the app; auth callbacks and form posts are rejected otherwise |
+| `BETTER_AUTH_SECRET` | `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in |
+| `RESEND_API_KEY` | Email delivery |
+| `EMAIL_FROM` | Sender on a domain verified in Resend. `onboarding@resend.dev` only delivers to the Resend account owner, so use it for local development only |
+| `MATRIKKEL_API_URL` | External service with sections and owners per address. Optional: without it, a new sameie gets a chart of accounts but no flats or owners |
+
+### Database changes
+
+Edit `src/lib/schema.ts`, then `bun run db:generate`. The new migration in `drizzle/` is applied the next time the server starts. If a local database was created some other way (for example with `drizzle-kit push`), startup fails with `relation "…" already exists`; drop the `public` and `drizzle` schemas and start again.
+
 ## Docker
+
+Run the production image together with Postgres:
+
+```bash
+docker compose up --build   # http://localhost:3000, secrets from .env
+```
+
+Or on its own:
 
 ```bash
 docker build -t xcello-sameie .
@@ -27,7 +53,7 @@ docker run -p 3000:3000 \
   xcello-sameie
 ```
 
-The server listens on port 3000 and runs as the `node` user. `ORIGIN` must match the public URL, or form posts and auth callbacks are rejected. The image does not run migrations; apply the schema separately.
+The server listens on port 3000 and runs as the `node` user. Pending migrations run at startup, before the first request is served.
 
 ## Releases
 

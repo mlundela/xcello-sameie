@@ -9,6 +9,29 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U xcello -d xcello"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # The production image. Secrets (BETTER_AUTH_SECRET, GOOGLE_*, RESEND_API_KEY, EMAIL_FROM) come
+  # from .env; the database and origin are fixed for the compose network. Pending migrations run
+  # at startup. MATRIKKEL_API_URL points at an external service that isn't part of this file:
+  # without it, new organizations get a chart of accounts but no flats or owners.
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://xcello:xcello@db:5432/xcello
+      ORIGIN: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   postgres_data:
