@@ -15,6 +15,9 @@ const client = () => (resend ??= new Resend(env.RESEND_API_KEY));
 
 const ROLE_LABELS: Record<string, string> = { owner: 'eier', admin: 'administrator', member: 'medlem' };
 
+// Names come from signup and org creation forms; without escaping they inject markup into the email
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 export async function sendVerificationEmail(opts: { to: string; url: string }) {
 	await client().emails.send({
 		from: env.EMAIL_FROM!,
@@ -42,8 +45,8 @@ export async function sendInviteEmail(opts: {
 		subject: `Du er invitert til ${opts.organizationName}`,
 		html: `
 			<p>Hei,</p>
-			<p><strong>${opts.inviterName}</strong> har invitert deg til
-			<strong>${opts.organizationName}</strong> som <em>${ROLE_LABELS[opts.role] ?? opts.role}</em>.</p>
+			<p><strong>${escapeHtml(opts.inviterName)}</strong> har invitert deg til
+			<strong>${escapeHtml(opts.organizationName)}</strong> som <em>${escapeHtml(ROLE_LABELS[opts.role] ?? opts.role)}</em>.</p>
 			<p><a href="${opts.acceptUrl}">Godta invitasjonen</a></p>
 			<p>Lenken utløper etter 48 timer.</p>
 		`

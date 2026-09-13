@@ -1,6 +1,6 @@
 import { command, query, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
+import { ADDRESS_ID_PATTERN, auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireOrgId, requireSession } from '$lib/server/tenant';
 import { flat, accountingPeriod, flatRent, flatOwnership, owner } from '$lib/schema';
@@ -102,9 +102,9 @@ export const set_initial_rent = command(
 
 export const create_organization = command(
 	v.object({
-		orgNo: v.string(),
-		name: v.string(),
-		addressId: v.string(),
+		orgNo: v.pipe(v.string(), v.regex(/^\d{9}$/)),
+		name: v.pipe(v.string(), v.minLength(1)),
+		addressId: v.pipe(v.string(), v.regex(ADDRESS_ID_PATTERN)),
 		address: v.string(),
 		postalCode: v.string(),
 		city: v.string()

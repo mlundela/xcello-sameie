@@ -28,9 +28,12 @@ type Seksjon = {
     }>;
 };
 
+/** kommunenummer/adressekode/nummer/bokstav as built from a Geonorge address. It is pasted into a URL path. */
+export const ADDRESS_ID_PATTERN = /^\d{4}\/\d+\/\d+\/[A-Za-z]*$/;
+
 /** Sections and owners at an address from the Matrikkel service. Org creation goes on without them. */
 async function fetchSeksjoner(addressId: unknown): Promise<Seksjon[]> {
-    if (typeof addressId !== 'string' || !addressId) return [];
+    if (typeof addressId !== 'string' || !ADDRESS_ID_PATTERN.test(addressId)) return [];
     if (!env.MATRIKKEL_API_URL) {
         console.warn('MATRIKKEL_API_URL is not set; creating organization without flats and owners');
         return [];
@@ -67,7 +70,8 @@ export const auth = betterAuth({
     },
     emailVerification: {
         sendVerificationEmail: async ({user, url}: { user: { email: string }; url: string }) => {
-            console.log('Send email verification mail:', user.email, url);
+            // Don't log `url`: it signs the user in
+            console.log('Sending verification email to', user.email);
             await sendVerificationEmail({to: user.email, url});
         },
         autoSignInAfterVerification: true,
