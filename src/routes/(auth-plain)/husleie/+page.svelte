@@ -15,7 +15,7 @@
 	let error = $state('');
 	let success = $state(false);
 
-	function fillFromShare(flats: Awaited<ReturnType<typeof data>>, changedFlatId: string) {
+	function fillFromShare(flats: Awaited<typeof data>, changedFlatId: string) {
 		if (!autoFill) return;
 		const first = flats.find((f) => f.id === changedFlatId);
 		if (!first) return;
@@ -29,7 +29,7 @@
 		}
 	}
 
-	async function handleSubmit(flats: Awaited<ReturnType<typeof data>>) {
+	async function handleSubmit(flats: Awaited<typeof data>) {
 		error = '';
 		success = false;
 		const rents = flats.map((f) => ({

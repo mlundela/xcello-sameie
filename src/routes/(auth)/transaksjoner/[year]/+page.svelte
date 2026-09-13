@@ -17,7 +17,7 @@
 	const rulesData = get_rules();
 	const accountsData = get_accounts();
 
-	const year = $derived(parseInt(page.params.year));
+	const year = $derived(parseInt(page.params.year!));
 	const filter = $derived<'all' | 'income' | 'expense'>(
 		page.url.searchParams.get('type') === 'income' ? 'income'
 		: page.url.searchParams.get('type') === 'expense' ? 'expense'

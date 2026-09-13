@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { get_invitation, accept_invitation } from './invite.remote';
 
-	const inv = $derived(get_invitation({ id: page.params.invitationId }));
+	const inv = $derived(get_invitation({ id: page.params.invitationId! }));
 
 	let accepting = $state(false);
 	let acceptError = $state('');
@@ -12,7 +12,7 @@
 		accepting = true;
 		acceptError = '';
 		try {
-			await accept_invitation({ invitationId: page.params.invitationId });
+			await accept_invitation({ invitationId: page.params.invitationId! });
 			goto('/dashboard');
 		} catch (err) {
 			acceptError = err instanceof Error ? err.message : 'Failed to accept invitation';
