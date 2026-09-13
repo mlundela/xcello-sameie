@@ -58,8 +58,10 @@ export const setup_accounting_periods = command(
 			year: startYear + i,
 			status: 'OPEN' as const
 		}));
-		await db.insert(accountingPeriod).values(rows).onConflictDoNothing();
-		await createOpeningVoucher(db, { organizationId: orgId, year: startYear, bankOre, loanOre, ownerBalances });
+		await db.transaction(async (tx) => {
+			await tx.insert(accountingPeriod).values(rows).onConflictDoNothing();
+			await createOpeningVoucher(tx, { organizationId: orgId, year: startYear, bankOre, loanOre, ownerBalances });
+		});
 	}
 );
 

@@ -21,11 +21,13 @@ async function getBankAccountId(tx: DbOrTx, organizationId: string): Promise<str
 	return getAccountIdByCode(tx, organizationId, '1920');
 }
 
-async function nextVoucherNumber(
-	tx: DbOrTx,
-	organizationId: string,
-	fiscalYear: number
-): Promise<number> {
+/**
+ * First free voucher number in a fiscal year. The advisory lock serialises numbering per (org, year)
+ * until the transaction ends; without it two concurrent imports read the same MAX and one of them
+ * fails on voucher_org_year_number_idx. The caller may use consecutive numbers from the result.
+ */
+async function reserveVoucherNumbers(tx: Tx, organizationId: string, fiscalYear: number): Promise<number> {
+	await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}::text), ${fiscalYear}::int)`);
 	const [row] = await tx
 		.select({ max: sql<number | null>`MAX(${voucher.voucherNumber})` })
 		.from(voucher)
@@ -33,71 +35,91 @@ async function nextVoucherNumber(
 	return (row?.max ?? 0) + 1;
 }
 
+function* chunks<T>(rows: T[], size = 1000): Generator<T[]> {
+	for (let i = 0; i < rows.length; i += size) yield rows.slice(i, i + size);
+}
+
+type BankVoucher = {
+	bankTransactionId: string;
+	date: string;
+	amountOre: number;
+	counterAccountId: string;
+	ownerId?: string | null;
+	description: string;
+};
+
 /**
- * Genererer et auto-bilag for en bank-transaksjon (1:1, to linjer).
+ * Genererer auto-bilag for bank-transaksjoner (1:1, to linjer hver) og setter bankTransaction.voucherId.
  * Innbetaling (amountOre > 0): debet bank, kredit motkonto.
  * Utbetaling (amountOre < 0): debet motkonto, kredit bank.
- * Setter også bankTransaction.voucherId.
+ * Batched: a few statements whatever the number of rows, so a year's statement imports in one go.
  */
-export async function createBankAutoVoucher(
-	tx: DbOrTx,
-	opts: {
-		organizationId: string;
-		bankTransactionId: string;
-		date: string;
-		amountOre: number;
-		counterAccountId: string;
-		ownerId?: string | null;
-		description: string;
-	}
-): Promise<string> {
-	if (opts.amountOre === 0) error(400, 'Kan ikke generere bilag for transaksjon med beløp 0');
+export async function createBankAutoVouchers(tx: Tx, organizationId: string, items: BankVoucher[]): Promise<void> {
+	if (items.length === 0) return;
+	if (items.some((i) => i.amountOre === 0)) error(400, 'Kan ikke generere bilag for transaksjon med beløp 0');
 
-	const bankAccountId = await getBankAccountId(tx, opts.organizationId);
-	const fiscalYear = parseInt(opts.date.substring(0, 4));
-	const voucherNumber = await nextVoucherNumber(tx, opts.organizationId, fiscalYear);
-	const voucherId = generateId();
-	const abs = Math.abs(opts.amountOre);
-	const isIncoming = opts.amountOre > 0;
+	const bankAccountId = await getBankAccountId(tx, organizationId);
+	const fiscalYearOf = (date: string) => parseInt(date.substring(0, 4));
+	const vouchers: (typeof voucher.$inferInsert)[] = [];
+	const lines: (typeof voucherLine.$inferInsert)[] = [];
+	const links: { bankTransactionId: string; voucherId: string }[] = [];
+	const createdAt = new Date();
 
-	await tx.insert(voucher).values({
-		id: voucherId,
-		organizationId: opts.organizationId,
-		voucherNumber,
-		fiscalYear,
-		date: opts.date,
-		description: opts.description,
-		source: 'BANK_AUTO',
-		createdAt: new Date()
-	});
-
-	await tx.insert(voucherLine).values([
-		{
-			id: generateId(),
-			voucherId,
-			lineNumber: 1,
-			ledgerAccountId: isIncoming ? bankAccountId : opts.counterAccountId,
-			debitOre: abs,
-			creditOre: 0,
-			ownerId: !isIncoming ? opts.ownerId ?? null : null
-		},
-		{
-			id: generateId(),
-			voucherId,
-			lineNumber: 2,
-			ledgerAccountId: isIncoming ? opts.counterAccountId : bankAccountId,
-			debitOre: 0,
-			creditOre: abs,
-			ownerId: isIncoming ? opts.ownerId ?? null : null
+	// Ascending year order, so concurrent callers take the advisory locks in the same order
+	const years = [...new Set(items.map((i) => fiscalYearOf(i.date)))].sort((a, b) => a - b);
+	for (const fiscalYear of years) {
+		let voucherNumber = await reserveVoucherNumbers(tx, organizationId, fiscalYear);
+		for (const item of items) {
+			if (fiscalYearOf(item.date) !== fiscalYear) continue;
+			const voucherId = generateId();
+			const abs = Math.abs(item.amountOre);
+			const isIncoming = item.amountOre > 0;
+			vouchers.push({
+				id: voucherId,
+				organizationId,
+				voucherNumber: voucherNumber++,
+				fiscalYear,
+				date: item.date,
+				description: item.description,
+				source: 'BANK_AUTO',
+				createdAt
+			});
+			lines.push(
+				{
+					id: generateId(),
+					voucherId,
+					lineNumber: 1,
+					ledgerAccountId: isIncoming ? bankAccountId : item.counterAccountId,
+					debitOre: abs,
+					creditOre: 0,
+					ownerId: isIncoming ? null : (item.ownerId ?? null)
+				},
+				{
+					id: generateId(),
+					voucherId,
+					lineNumber: 2,
+					ledgerAccountId: isIncoming ? item.counterAccountId : bankAccountId,
+					debitOre: 0,
+					creditOre: abs,
+					ownerId: isIncoming ? (item.ownerId ?? null) : null
+				}
+			);
+			links.push({ bankTransactionId: item.bankTransactionId, voucherId });
 		}
-	]);
+	}
 
-	await tx
-		.update(bankTransaction)
-		.set({ voucherId })
-		.where(eq(bankTransaction.id, opts.bankTransactionId));
+	for (const chunk of chunks(vouchers)) await tx.insert(voucher).values(chunk);
+	for (const chunk of chunks(lines)) await tx.insert(voucherLine).values(chunk);
+	for (const chunk of chunks(links)) {
+		const values = sql.join(chunk.map((l) => sql`(${l.bankTransactionId}, ${l.voucherId})`), sql`, `);
+		await tx.execute(
+			sql`update bank_transaction set voucher_id = v.voucher_id from (values ${values}) as v(id, voucher_id) where bank_transaction.id = v.id`
+		);
+	}
+}
 
-	return voucherId;
+export async function createBankAutoVoucher(tx: Tx, opts: BankVoucher & { organizationId: string }): Promise<void> {
+	await createBankAutoVouchers(tx, opts.organizationId, [opts]);
 }
 
 export async function readOpeningState(
@@ -137,7 +159,7 @@ export async function readOpeningState(
 }
 
 export async function createOpeningVoucher(
-	tx: DbOrTx,
+	tx: Tx,
 	opts: {
 		organizationId: string;
 		year: number;
@@ -158,7 +180,7 @@ export async function createOpeningVoucher(
 		getAccountIdByCode(tx, opts.organizationId, '2770')
 	]);
 
-	const voucherNumber = await nextVoucherNumber(tx, opts.organizationId, opts.year);
+	const voucherNumber = await reserveVoucherNumbers(tx, opts.organizationId, opts.year);
 	const voucherId = generateId();
 
 	await tx.insert(voucher).values({

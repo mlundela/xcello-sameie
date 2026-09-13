@@ -65,7 +65,8 @@ Columns are named `*Ore` / `*_ore` and are `integer`. Format with `formatKr(ore)
 ### The voucher (bilag) layer is the accounting source of truth
 `src/lib/server/voucher.ts` is the **only** place vouchers are written. It's a hidden data layer: the UI still talks about bank transactions and one account/owner per transaction, but reports aggregate `voucher_line`, not `bank_transaction`.
 
-- `createBankAutoVoucher` — 2 lines, one side always bank account `1920`; sets `bankTransaction.voucherId`.
+- `createBankAutoVouchers` (batch; `createBankAutoVoucher` for one) — 2 lines each, one side always bank account `1920`; sets `bankTransaction.voucherId`. Pass all rows of an operation in one call: it does a fixed number of statements however many rows there are.
+- Voucher numbers are reserved under a `pg_advisory_xact_lock` per (org, fiscal year), so every voucher writer takes a transaction (`Tx`), never bare `db`.
 - `deleteBankAutoVoucher` — call it *before* re-categorising a transaction, then create the new voucher; every mutation path in `banktransaksjoner.remote.ts` does this inside one `db.transaction`.
 - `createOpeningVoucher` / `readOpeningState` — opening balances are `source: 'OPENING'` vouchers (they used to be their own tables; see migration 0006). Writing one deletes and recreates the year's OPENING voucher, so read current state first and pass the parts you aren't changing.
 - Invariants: `SUM(debitOre) === SUM(creditOre)` per voucher; `voucherNumber` sequential per `(organizationId, fiscalYear)`; fiscal year derives from the voucher date.

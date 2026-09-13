@@ -2,8 +2,9 @@ import { query } from '$app/server';
 import { db } from '$lib/server/db';
 import { requireOrgId } from '$lib/server/tenant';
 import { expectedRentByOwner } from '$lib/server/rent';
+import { inYear } from '$lib/server/period';
 import { accountingPeriod, bankTransaction } from '$lib/schema';
-import { eq, and, sql, sum, inArray } from 'drizzle-orm';
+import { eq, and, sum, inArray } from 'drizzle-orm';
 
 export const get_dashboard_data = query(async () => {
 	const orgId = requireOrgId();
@@ -32,7 +33,7 @@ export const get_dashboard_data = query(async () => {
 			and(
 				eq(bankTransaction.organizationId, orgId),
 				eq(bankTransaction.status, 'MATCHED'),
-				sql`EXTRACT(YEAR FROM ${bankTransaction.date}::date) = ${period.year}`,
+				inYear(bankTransaction.date, period.year),
 				inArray(bankTransaction.matchedOwnerId, [...expected.keys()])
 			)
 		)

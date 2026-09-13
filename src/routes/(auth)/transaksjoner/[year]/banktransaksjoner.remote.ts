@@ -12,9 +12,10 @@ import {
 	accountingPeriod,
 	attachment
 } from '$lib/schema';
-import { eq, and, sql, inArray, ilike, gt, lt, asc, desc } from 'drizzle-orm';
+import { eq, and, sql, inArray, ilike, gt, gte, lt, lte, asc, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
-import { createBankAutoVoucher, deleteBankAutoVoucher } from '$lib/server/voucher';
+import { createBankAutoVoucher, createBankAutoVouchers, deleteBankAutoVoucher } from '$lib/server/voucher';
+import { inYear } from '$lib/server/period';
 
 type ParsedRow = { date: string; description: string; amountOre: number };
 
@@ -129,8 +130,8 @@ function parseSparebankenVest(lines: string[]): ParsedRow[] {
 		});
 }
 
-function detectAndParse(buf: Buffer): ParsedRow[] {
-	const text = decodeBuffer(buf).replace(/^\uFEFF/, ''); // strip BOM
+function detectAndParse(decoded: string): ParsedRow[] {
+	const text = decoded.replace(/^\uFEFF/, ''); // strip BOM
 	const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
 	const first = lines[0] ?? '';
 	// Split on first separator to get the first field (ASCII-stable even when ø/æ/å is garbled)
@@ -178,7 +179,7 @@ export const get_transactions = query(
 			.where(
 				and(
 					eq(bankTransaction.organizationId, orgId),
-					year ? sql`EXTRACT(YEAR FROM ${bankTransaction.date}::date) = ${year}` : undefined,
+					year ? inYear(bankTransaction.date, year) : undefined,
 					type === 'income' ? gt(bankTransaction.amountOre, 0) : type === 'expense' ? lt(bankTransaction.amountOre, 0) : undefined
 				)
 			)
@@ -244,9 +245,8 @@ export const import_csv = command(
 	async ({ csvBase64, fileName }) => {
 		const orgId = requireOrgId();
 
-		const buf = Buffer.from(csvBase64, 'base64');
-		const csvText = decodeBuffer(buf);
-		const parsed = detectAndParse(buf);
+		const csvText = decodeBuffer(Buffer.from(csvBase64, 'base64'));
+		const parsed = detectAndParse(csvText);
 
 		if (parsed.length === 0) error(400, 'Filen inneholder ingen transaksjoner');
 
@@ -268,7 +268,8 @@ export const import_csv = command(
 			error(400, `Ingen åpen regnskapsperiode for år: ${missingYears.join(', ')}`);
 		}
 
-		// Fetch existing transactions to detect duplicates
+		// Existing transactions in the file's date range, to detect duplicates (ISO dates sort as strings)
+		const dates = parsed.map((r) => r.date).sort();
 		const existing = await db
 			.select({
 				date: bankTransaction.date,
@@ -276,7 +277,13 @@ export const import_csv = command(
 				amountOre: bankTransaction.amountOre
 			})
 			.from(bankTransaction)
-			.where(eq(bankTransaction.organizationId, orgId));
+			.where(
+				and(
+					eq(bankTransaction.organizationId, orgId),
+					gte(bankTransaction.date, dates[0]),
+					lte(bankTransaction.date, dates[dates.length - 1])
+				)
+			);
 
 		const existingKeys = new Set(
 			existing.map((r) => `${r.date}|${r.description}|${r.amountOre}`)
@@ -369,18 +376,22 @@ export const import_csv = command(
 				await tx.insert(bankTransaction).values(
 					toInsert.map((r) => ({ ...r, bankStatementId: stmt.id }))
 				);
-				for (const r of toInsert) {
-					if (r.status === 'UNMATCHED' || !r.ledgerAccountId) continue;
-					await createBankAutoVoucher(tx, {
-						organizationId: orgId,
-						bankTransactionId: r.id,
-						date: r.date,
-						amountOre: r.amountOre,
-						counterAccountId: r.ledgerAccountId,
-						ownerId: r.matchedOwnerId,
-						description: r.userDescription ?? r.description
-					});
-				}
+				await createBankAutoVouchers(
+					tx,
+					orgId,
+					toInsert.flatMap((r) =>
+						r.status === 'UNMATCHED' || !r.ledgerAccountId
+							? []
+							: [{
+									bankTransactionId: r.id,
+									date: r.date,
+									amountOre: r.amountOre,
+									counterAccountId: r.ledgerAccountId,
+									ownerId: r.matchedOwnerId,
+									description: r.userDescription ?? r.description
+								}]
+					)
+				);
 			}
 		});
 
@@ -486,17 +497,18 @@ export const create_rule_and_apply = command(
 					description: bankTransaction.description,
 					userDescription: bankTransaction.userDescription
 				});
-			for (const row of updated) {
-				await createBankAutoVoucher(tx, {
-					organizationId: orgId,
+			await createBankAutoVouchers(
+				tx,
+				orgId,
+				updated.map((row) => ({
 					bankTransactionId: row.id,
 					date: row.date,
 					amountOre: row.amountOre,
 					counterAccountId: ledgerAccountId,
 					ownerId,
 					description: row.userDescription ?? row.description
-				});
-			}
+				}))
+			);
 			return updated.length;
 		});
 		return { matched };
@@ -540,16 +552,17 @@ export const create_expense_rule_and_apply = command(
 					description: bankTransaction.description,
 					userDescription: bankTransaction.userDescription
 				});
-			for (const row of updated) {
-				await createBankAutoVoucher(tx, {
-					organizationId: orgId,
+			await createBankAutoVouchers(
+				tx,
+				orgId,
+				updated.map((row) => ({
 					bankTransactionId: row.id,
 					date: row.date,
 					amountOre: row.amountOre,
 					counterAccountId: ledgerAccountId,
 					description: row.userDescription ?? row.description
-				});
-			}
+				}))
+			);
 			return updated.length;
 		});
 		return { categorized };

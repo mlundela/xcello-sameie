@@ -4,6 +4,7 @@ import { db } from '$lib/server/db';
 import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
 import { expectedRentByOwner } from '$lib/server/rent';
+import { inYear } from '$lib/server/period';
 import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
 import { eq, and, sql, inArray } from 'drizzle-orm';
 import { createRequire } from 'module';
@@ -85,7 +86,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		.where(
 			and(
 				eq(bankTransaction.organizationId, orgId),
-				sql`EXTRACT(YEAR FROM ${bankTransaction.date}::date) = ${year}`,
+				inYear(bankTransaction.date, year),
 				eq(bankTransaction.status, 'UNMATCHED')
 			)
 		)
