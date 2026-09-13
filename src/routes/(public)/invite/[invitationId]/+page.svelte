@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/notify.svelte';
+	import { roleLabel } from '$lib/roles';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { get_invitation, accept_invitation } from './invite.remote';
@@ -16,7 +17,7 @@
 			await accept_invitation({ invitationId: page.params.invitationId! });
 			goto('/dashboard');
 		} catch (err) {
-			acceptError = errorMessage(err, 'Failed to accept invitation');
+			acceptError = errorMessage(err, 'Kunne ikke godta invitasjonen');
 		} finally {
 			accepting = false;
 		}
@@ -32,22 +33,22 @@
 				</div>
 			{:then { expired, status, invitation }}
 				{#if expired}
-					<h1 class="card-title">Invitation no longer valid</h1>
+					<h1 class="card-title">Invitasjonen er ikke lenger gyldig</h1>
 					<p class="text-sm text-base-content/60">
-						This invitation has been {status === 'accepted'
-							? 'already accepted'
-							: status === 'cancelled'
-								? 'cancelled'
-								: 'expired'}.
+						Invitasjonen er {status === 'accepted'
+							? 'allerede godtatt'
+							: status === 'canceled' || status === 'cancelled'
+								? 'trukket tilbake'
+								: 'utløpt'}.
 					</p>
 					<div class="card-actions mt-2">
-						<a href="/" class="btn btn-ghost btn-sm">Go home</a>
+						<a href="/" class="btn btn-ghost btn-sm">Til forsiden</a>
 					</div>
 				{:else if invitation}
-					<h1 class="card-title">You've been invited</h1>
+					<h1 class="card-title">Du er invitert</h1>
 					<p class="text-sm text-base-content/70">
-						Join <strong>{invitation.organizationName}</strong> as a
-						<strong>{invitation.role}</strong>.
+						Bli med i <strong>{invitation.organizationName}</strong> som
+						<strong>{roleLabel(invitation.role).toLowerCase()}</strong>.
 					</p>
 					{#if acceptError}
 						<div role="alert" class="alert alert-error alert-soft">
@@ -59,7 +60,7 @@
 							{#if accepting}
 								<span class="loading loading-spinner loading-sm"></span>
 							{/if}
-							Accept invitation
+							Godta invitasjonen
 						</button>
 					</div>
 				{/if}

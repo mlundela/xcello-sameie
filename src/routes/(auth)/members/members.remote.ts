@@ -73,7 +73,7 @@ export const leave_organization = command(v.object({}), async () => {
 	const isPrivileged = currentMember?.role === 'admin' || currentMember?.role === 'owner';
 
 	if (isPrivileged && privileged.length === 1) {
-		return { error: 'You are the only admin. Assign another admin before leaving.' };
+		return { error: 'Du er eneste administrator. Gi en annen bruker administratorrollen før du forlater sameiet.' };
 	}
 
 	await auth.api.leaveOrganization({

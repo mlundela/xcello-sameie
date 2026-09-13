@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { env } from '$env/dynamic/private';
 import { building } from '$app/environment';
+import { roleLabel } from '$lib/roles';
 
 if (!building) {
 	if (!env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
@@ -13,7 +14,6 @@ if (!building) {
 let resend: Resend | undefined;
 const client = () => (resend ??= new Resend(env.RESEND_API_KEY));
 
-const ROLE_LABELS: Record<string, string> = { owner: 'eier', admin: 'administrator', member: 'medlem' };
 
 // Names come from signup and org creation forms; without escaping they inject markup into the email
 const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -46,7 +46,7 @@ export async function sendInviteEmail(opts: {
 		html: `
 			<p>Hei,</p>
 			<p><strong>${escapeHtml(opts.inviterName)}</strong> har invitert deg til
-			<strong>${escapeHtml(opts.organizationName)}</strong> som <em>${escapeHtml(ROLE_LABELS[opts.role] ?? opts.role)}</em>.</p>
+			<strong>${escapeHtml(opts.organizationName)}</strong> som <em>${escapeHtml(roleLabel(opts.role).toLowerCase())}</em>.</p>
 			<p><a href="${opts.acceptUrl}">Godta invitasjonen</a></p>
 			<p>Lenken utløper etter 48 timer.</p>
 		`

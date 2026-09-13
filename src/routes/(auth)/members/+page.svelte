@@ -1,5 +1,6 @@
 <script lang="ts">
     import { errorMessage, showError } from '$lib/notify.svelte';
+    import { roleLabel } from '$lib/roles';
     import {goto} from '$app/navigation';
     import {cancel_invite, get_members_data, invite_member, leave_organization, remove_member} from './members.remote';
 
@@ -22,7 +23,7 @@
             email = '';
             inviteSuccess = true;
         } catch (err) {
-            inviteError = errorMessage(err, 'Failed to send invitation');
+            inviteError = errorMessage(err, 'Kunne ikke sende invitasjonen');
         } finally {
             loading = false;
         }
@@ -75,25 +76,25 @@
     {:then {members, pendingInvites, isAdmin, currentUserId}}
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
-                <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">Members</p>
+                <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">Medlemmer</p>
                 <ul class="flex flex-col divide-y divide-base-200">
-                    {#each members as m}
+                    {#each members as m (m.id)}
                         <li class="flex items-center justify-between py-3">
                             <div>
                                 <p class="font-medium text-sm">{m.name}</p>
                                 <p class="text-xs text-base-content/60">{m.email}</p>
                             </div>
                             <div class="flex items-center gap-2">
-									<span class="badge {m.role === 'admin' ? 'badge-primary' : 'badge-ghost'} badge-soft badge-sm">
-										{m.role}
-									</span>
+                                <span class="badge {m.role === 'member' ? 'badge-ghost' : 'badge-primary'} badge-soft badge-sm">
+                                    {roleLabel(m.role)}
+                                </span>
                                 {#if m.userId === currentUserId}
                                     <button onclick={handleLeave} class="btn btn-ghost btn-xs text-error">
-                                        Leave
+                                        Forlat
                                     </button>
                                 {:else if isAdmin}
                                     <button onclick={() => handleRemove(m.id)} class="btn btn-ghost btn-xs text-error">
-                                        Remove
+                                        Fjern
                                     </button>
                                 {/if}
                             </div>
@@ -108,21 +109,21 @@
                 <div class="card bg-base-100 shadow-sm">
                     <div class="card-body">
                         <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">
-                            Pending invitations
+                            Ventende invitasjoner
                         </p>
                         <ul class="flex flex-col divide-y divide-base-200">
-                            {#each pendingInvites as inv}
+                            {#each pendingInvites as inv (inv.id)}
                                 <li class="flex items-center justify-between py-3">
                                     <div>
                                         <p class="font-medium text-sm">{inv.email}</p>
                                         <p class="text-xs text-base-content/60">
-                                            {inv.role ?? 'member'} ·
-                                            expires {new Date(inv.expiresAt).toLocaleDateString()}
+                                            {roleLabel(inv.role ?? 'member')} ·
+                                            utløper {new Date(inv.expiresAt).toLocaleDateString('nb-NO')}
                                         </p>
                                     </div>
                                     <button onclick={() => handleCancel(inv.id)}
                                             class="btn btn-ghost btn-xs text-error">
-                                        Cancel
+                                        Trekk tilbake
                                     </button>
                                 </li>
                             {/each}
@@ -134,7 +135,7 @@
             <div class="card bg-base-100 shadow-sm">
                 <div class="card-body">
                     <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">
-                        Invite member
+                        Inviter bruker
                     </p>
                     <form onsubmit={handleInvite} class="flex flex-col gap-3">
                         <label class="floating-label">
@@ -143,15 +144,15 @@
                                     bind:value={email}
                                     required
                                     autocomplete="off"
-                                    placeholder="colleague@example.com"
+                                    placeholder="kollega@eksempel.no"
                                     class="input input-bordered w-full"
                             />
-                            <span>Email</span>
+                            <span>E-post</span>
                         </label>
 
                         <select bind:value={role} class="select select-bordered w-full">
-                            <option value="member">Member</option>
-                            <option value="admin">Admin</option>
+                            <option value="member">{roleLabel('member')}</option>
+                            <option value="admin">{roleLabel('admin')}</option>
                         </select>
 
                         {#if inviteError}
@@ -161,7 +162,7 @@
                         {/if}
                         {#if inviteSuccess}
                             <div role="alert" class="alert alert-success alert-soft">
-                                <span>Invitation sent!</span>
+                                <span>Invitasjonen er sendt.</span>
                             </div>
                         {/if}
 
@@ -169,7 +170,7 @@
                             {#if loading}
                                 <span class="loading loading-spinner loading-sm"></span>
                             {/if}
-                            Send invitation
+                            Send invitasjon
                         </button>
                     </form>
                 </div>

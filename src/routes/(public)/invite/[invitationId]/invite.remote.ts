@@ -29,7 +29,7 @@ export const get_invitation = query(
 				id: inv.id,
 				email: inv.email,
 				role: inv.role ?? 'member',
-				organizationName: org?.name ?? 'an organization'
+				organizationName: org?.name ?? 'et sameie'
 			}
 		};
 	}

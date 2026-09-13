@@ -17,7 +17,7 @@
 		loading = true;
 		const result = await authClient.signIn.email({ email, password, callbackURL: next });
 		loading = false;
-		if (result.error) error = result.error.message ?? 'Sign in failed';
+		if (result.error) error = result.error.message ?? 'Innlogging feilet';
 		else await goto(next, { invalidateAll: true });
 	}
 
@@ -29,7 +29,7 @@
 <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
 	<div class="card w-full max-w-sm bg-base-100 shadow-xl">
 		<div class="card-body">
-			<h1 class="card-title text-2xl mb-2">Welcome back</h1>
+			<h1 class="card-title text-2xl mb-2">Velkommen tilbake</h1>
 
 			<form onsubmit={signInWithEmail} class="flex flex-col gap-3">
 				<label class="floating-label">
@@ -38,10 +38,10 @@
 						bind:value={email}
 						required
 						autocomplete="email"
-						placeholder="you@example.com"
+						placeholder="du@eksempel.no"
 						class="input input-bordered w-full"
 					/>
-					<span>Email</span>
+					<span>E-post</span>
 				</label>
 
 				<label class="floating-label">
@@ -53,7 +53,7 @@
 						placeholder="••••••••"
 						class="input input-bordered w-full"
 					/>
-					<span>Password</span>
+					<span>Passord</span>
 				</label>
 
 				{#if error}
@@ -66,14 +66,14 @@
 					{#if loading}
 						<span class="loading loading-spinner loading-sm"></span>
 					{/if}
-					Sign in
+					Logg inn
 				</button>
 			</form>
 
-			<div class="divider text-base-content/40">or</div>
+			<div class="divider text-base-content/40">eller</div>
 
 			<button onclick={signInWithGoogle} class="btn btn-outline w-full">
-				Sign in with Google
+				Logg inn med Google
 			</button>
 
 			<div class="divider text-base-content/40"></div>
