@@ -1,8 +1,8 @@
 <script lang="ts">
     import { errorMessage, showError } from '$lib/notify.svelte';
     import { roleLabel } from '$lib/roles';
-    import {goto} from '$app/navigation';
-    import {cancel_invite, get_members_data, invite_member, leave_organization, remove_member} from './members.remote';
+    import {goto, refreshAll} from '$app/navigation';
+    import {cancel_invite, get_members_data, invite_member, leave_organization, remove_member, update_member_role} from './members.remote';
 
     const data = get_members_data();
 
@@ -47,11 +47,22 @@
 
     async function handleLeave() {
         leaveError = '';
-        const result = await leave_organization({});
-        if (result?.error) {
-            leaveError = result.error;
-        } else {
-            goto('/dashboard');
+        try {
+            await leave_organization({});
+            // The active sameie changed: leave the page, then refetch everything
+            await goto('/dashboard');
+            await refreshAll();
+        } catch (err) {
+            leaveError = errorMessage(err);
+        }
+    }
+
+    async function handleRoleChange(select: HTMLSelectElement, memberId: string, previousRole: string) {
+        try {
+            await update_member_role({memberId, role: select.value as 'member' | 'admin'}).updates(data);
+        } catch (err) {
+            select.value = previousRole;
+            showError(err);
         }
     }
 </script>
@@ -85,9 +96,21 @@
                                 <p class="text-xs text-base-content/60">{m.email}</p>
                             </div>
                             <div class="flex items-center gap-2">
-                                <span class="badge {m.role === 'member' ? 'badge-ghost' : 'badge-primary'} badge-soft badge-sm">
-                                    {roleLabel(m.role)}
-                                </span>
+                                {#if isAdmin && m.userId !== currentUserId && m.role !== 'owner'}
+                                    <select
+                                        class="select select-bordered select-xs"
+                                        aria-label="Rolle for {m.name}"
+                                        value={m.role}
+                                        onchange={(e) => handleRoleChange(e.currentTarget, m.id, m.role)}
+                                    >
+                                        <option value="member">{roleLabel('member')}</option>
+                                        <option value="admin">{roleLabel('admin')}</option>
+                                    </select>
+                                {:else}
+                                    <span class="badge {m.role === 'member' ? 'badge-ghost' : 'badge-primary'} badge-soft badge-sm">
+                                        {roleLabel(m.role)}
+                                    </span>
+                                {/if}
                                 {#if m.userId === currentUserId}
                                     <button onclick={handleLeave} class="btn btn-ghost btn-xs text-error">
                                         Forlat
