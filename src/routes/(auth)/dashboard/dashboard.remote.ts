@@ -1,6 +1,6 @@
-import { query, getRequestEvent } from '$app/server';
-import { auth } from '$lib/server/auth';
+import { query } from '$app/server';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import {
 	accountingPeriod,
 	flat,
@@ -10,15 +10,6 @@ import {
 	owner
 } from '$lib/schema';
 import { eq, and, isNull, or, gte, sql, sum, inArray } from 'drizzle-orm';
-
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
 
 function findRentForMonth(
 	rents: { flatId: string; fromYear: number; fromMonth: number; toYear: number | null; toMonth: number | null; amount: number }[],
@@ -39,7 +30,7 @@ function findRentForMonth(
 }
 
 export const get_dashboard_data = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 
 	// Oldest OPEN period
 	const [period] = await db

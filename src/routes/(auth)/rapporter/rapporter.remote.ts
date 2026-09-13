@@ -1,22 +1,13 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { bankTransaction, owner, flatOwnership, flat, voucher, voucherLine, ledgerAccount } from '$lib/schema';
 import { eq, and, sql, isNull, or, gte, inArray } from 'drizzle-orm';
 import { createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
 export const get_rapport_years = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	const rows = await db
 		.selectDistinct({
 			year: sql<number>`EXTRACT(YEAR FROM ${bankTransaction.date}::date)::integer`
@@ -30,7 +21,7 @@ export const get_rapport_years = query(async () => {
 export const get_opening_balance = query(
 	v.object({ year: v.pipe(v.number(), v.integer()) }),
 	async ({ year }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const state = await readOpeningState(db, orgId, year);
 		if (!state) return null;
 		return { year, bankOre: state.bankOre, loanOre: state.loanOre };
@@ -44,7 +35,7 @@ export const set_opening_balance = command(
 		loanOre: v.number()
 	}),
 	async ({ year, bankOre, loanOre }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);
 			await createOpeningVoucher(tx, {
@@ -62,7 +53,7 @@ export const set_opening_balance = command(
 export const get_owner_opening_balances = query(
 	v.object({ year: v.pipe(v.number(), v.integer()) }),
 	async ({ year }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 
 		// All payment-responsible owners active at any point in the year
 		const ownerships = await db
@@ -106,7 +97,7 @@ export const set_owner_opening_balance = command(
 		balanceOre: v.number()
 	}),
 	async ({ year, ownerId, balanceOre }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);
 			const ownerBalances = (current?.ownerBalances ?? []).filter((o) => o.ownerId !== ownerId);

@@ -1,24 +1,14 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { ledgerAccount, bankTransaction } from '$lib/schema';
 import { eq, count } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
-
 export const get_accounts = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	return db
 		.select()
 		.from(ledgerAccount)
@@ -33,7 +23,7 @@ export const create_account = command(
 		type: v.union([v.literal('INCOME'), v.literal('EXPENSE'), v.literal('LIABILITY'), v.literal('ASSET'), v.literal('EQUITY')])
 	}),
 	async ({ code, name, type }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db.insert(ledgerAccount).values({ id: generateId(), organizationId: orgId, code, name, type });
 		await get_accounts().refresh();
 	}
@@ -42,7 +32,7 @@ export const create_account = command(
 export const delete_account = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
-		await getOrgId();
+		requireOrgId();
 		const [{ used }] = await db
 			.select({ used: count() })
 			.from(bankTransaction)
@@ -54,7 +44,7 @@ export const delete_account = command(
 );
 
 export const seed_default_accounts = command(v.object({}), async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	const existing = await db
 		.select({ used: count() })
 		.from(ledgerAccount)

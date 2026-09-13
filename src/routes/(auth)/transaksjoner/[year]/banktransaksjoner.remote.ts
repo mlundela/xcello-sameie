@@ -1,7 +1,7 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import {
 	bankTransaction,
 	bankStatement,
@@ -14,15 +14,6 @@ import {
 import { eq, and, sql, inArray, ilike, gt, lt, asc, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createBankAutoVoucher, deleteBankAutoVoucher } from '$lib/server/voucher';
-
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
 
 type ParsedRow = { date: string; description: string; amountOre: number };
 
@@ -160,7 +151,7 @@ export const get_transactions = query(
 		type: v.optional(v.picklist(['income', 'expense']))
 	}),
 	async ({ year, type }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const rows = await db
 			.select({
 				id: bankTransaction.id,
@@ -198,7 +189,7 @@ export const get_transactions = query(
 export const get_transaction = query(
 	v.object({ id: v.pipe(v.string(), v.minLength(1)) }),
 	async ({ id }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const [row] = await db
 			.select({
 				id: bankTransaction.id,
@@ -227,7 +218,7 @@ export const get_transaction = query(
 );
 
 export const get_statements = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	return db
 		.select()
 		.from(bankStatement)
@@ -236,7 +227,7 @@ export const get_statements = query(async () => {
 });
 
 export const get_open_periods = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	return db
 		.select()
 		.from(accountingPeriod)
@@ -250,7 +241,7 @@ export const import_csv = command(
 		fileName: v.pipe(v.string(), v.minLength(1))
 	}),
 	async ({ csvBase64, fileName }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 
 		const buf = Buffer.from(csvBase64, 'base64');
 		const csvText = decodeBuffer(buf);
@@ -410,7 +401,7 @@ async function get3600AccountId(orgId: string): Promise<string | null> {
 export const match_transaction = command(
 	v.object({ transactionId: v.string(), ownerId: v.string() }),
 	async ({ transactionId, ownerId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
 		await db.transaction(async (tx) => {
@@ -453,7 +444,7 @@ export const create_rule_and_apply = command(
 		userDescription: v.optional(v.string())
 	}),
 	async ({ pattern, ownerId, receiptNotRequired, userDescription }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
 		const matched = await db.transaction(async (tx) => {
@@ -509,7 +500,7 @@ export const create_expense_rule_and_apply = command(
 		userDescription: v.optional(v.string())
 	}),
 	async ({ pattern, ledgerAccountId, receiptNotRequired, userDescription }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const categorized = await db.transaction(async (tx) => {
 			await tx
 				.insert(matchingRule)
@@ -556,7 +547,7 @@ export const create_expense_rule_and_apply = command(
 export const unmatch_transaction = command(
 	v.object({ transactionId: v.string() }),
 	async ({ transactionId }) => {
-		await getOrgId();
+		requireOrgId();
 		await db.transaction(async (tx) => {
 			await deleteBankAutoVoucher(tx, transactionId);
 			await tx
@@ -571,7 +562,7 @@ export const unmatch_transaction = command(
 export const categorize_transaction = command(
 	v.object({ transactionId: v.string(), ledgerAccountId: v.string() }),
 	async ({ transactionId, ledgerAccountId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db.transaction(async (tx) => {
 			await deleteBankAutoVoucher(tx, transactionId);
 			const [row] = await tx
@@ -606,7 +597,7 @@ export const categorize_transaction = command(
 export const update_description = command(
 	v.object({ transactionId: v.string(), userDescription: v.nullable(v.string()) }),
 	async ({ transactionId, userDescription }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db
 			.update(bankTransaction)
 			.set({ userDescription })
@@ -617,7 +608,7 @@ export const update_description = command(
 export const get_attachments = query(
 	v.object({ transactionId: v.pipe(v.string(), v.minLength(1)) }),
 	async ({ transactionId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		return db
 			.select({
 				id: attachment.id,
@@ -640,7 +631,7 @@ export const upload_attachment = command(
 		content: v.pipe(v.string(), v.minLength(1))
 	}),
 	async ({ transactionId, fileName, mimeType, content }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const [tx] = await db
 			.select({ id: bankTransaction.id })
 			.from(bankTransaction)
@@ -662,7 +653,7 @@ export const upload_attachment = command(
 export const delete_attachment = command(
 	v.object({ attachmentId: v.pipe(v.string(), v.minLength(1)) }),
 	async ({ attachmentId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db
 			.delete(attachment)
 			.where(and(eq(attachment.id, attachmentId), eq(attachment.organizationId, orgId)));
@@ -672,7 +663,7 @@ export const delete_attachment = command(
 export const set_receipt_not_required = command(
 	v.object({ transactionId: v.pipe(v.string(), v.minLength(1)), value: v.boolean() }),
 	async ({ transactionId, value }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db
 			.update(bankTransaction)
 			.set({ receiptNotRequired: value })

@@ -1,22 +1,11 @@
-import { query, getRequestEvent } from '$app/server';
-import { auth } from '$lib/server/auth';
+import { query } from '$app/server';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { flat, flatOwnership, owner, flatRent } from '$lib/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-
-	return activeOrgId;
-}
-
 export const get_flats = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 
 	const rows = await db
 		.select({ flat, ownership: flatOwnership, owner })

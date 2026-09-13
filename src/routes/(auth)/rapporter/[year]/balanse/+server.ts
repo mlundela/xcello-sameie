@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import {
 	bankTransaction,
 	ledgerAccount,
@@ -66,11 +66,8 @@ function sectionLayout(bodyLength: number) {
 	};
 }
 
-export const GET: RequestHandler = async ({ request, params }) => {
-	const session = await auth.api.getSession({ headers: request.headers });
-	if (!session) throw error(401, 'Unauthorized');
-	const orgId = session.session.activeOrganizationId;
-	if (!orgId) throw error(400, 'No active organization');
+export const GET: RequestHandler = async ({ params }) => {
+	const orgId = requireOrgId();
 
 	const year = parseInt(params.year);
 	if (isNaN(year)) throw error(400, 'Ugyldig år');

@@ -2,27 +2,19 @@ import { command, query, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
 import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId, requireSession } from '$lib/server/tenant';
 import { flat, accountingPeriod, flatRent, flatOwnership, owner } from '$lib/schema';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createOpeningVoucher } from '$lib/server/voucher';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
 export const get_setup_flats = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	return db.select().from(flat).where(eq(flat.organizationId, orgId)).orderBy(flat.nummer);
 });
 
 export const get_setup_owners = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 	const rows = await db
 		.select({
 			ownerId: owner.id,
@@ -57,7 +49,7 @@ export const setup_accounting_periods = command(
 		}))
 	}),
 	async ({ startYear, bankOre, loanOre, ownerBalances }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const currentYear = new Date().getFullYear();
 		const rows = Array.from({ length: currentYear - startYear + 1 }, (_, i) => ({
 			id: generateId(),
@@ -79,7 +71,7 @@ export const set_initial_rent = command(
 		}))
 	}),
 	async ({ fromYear, rents }) => {
-		await getOrgId();
+		requireOrgId();
 		await db.transaction(async (tx) => {
 			for (const { flatId, amountKr } of rents) {
 				const [openEntry] = await tx
@@ -116,9 +108,8 @@ export const create_organization = command(
 		city: v.string()
 	}),
 	async ({ orgNo, name, addressId, address, postalCode, city }) => {
+		requireSession();
 		const event = getRequestEvent();
-		const session = await auth.api.getSession({ headers: event.request.headers });
-		if (!session) throw new Error('Unauthorized');
 
 		const slug = `${orgNo}-${Date.now()}`;
 		const metadata = { orgNo, addressId, address, postalCode, city };

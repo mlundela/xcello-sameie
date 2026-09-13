@@ -1,22 +1,13 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { matchingRule, owner, flat, flatOwnership } from '$lib/schema';
 import { eq, isNull, and } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
 export const get_rules = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 
 	const rules = await db
 		.select({
@@ -47,7 +38,7 @@ export const create_rule = command(
 		ownerId: v.pipe(v.string(), v.minLength(1))
 	}),
 	async ({ pattern, ownerId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		await db.insert(matchingRule).values({ id: generateId(), organizationId: orgId, pattern, ownerId });
 		await get_rules().refresh();
 	}
@@ -56,7 +47,7 @@ export const create_rule = command(
 export const delete_rule = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
-		await getOrgId();
+		requireOrgId();
 		await db.delete(matchingRule).where(eq(matchingRule.id, id));
 		await get_rules().refresh();
 	}

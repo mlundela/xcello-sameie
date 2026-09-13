@@ -1,22 +1,13 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { flat, flatRent } from '$lib/schema';
 import { and, eq, isNull, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
 export const get_husleie = query(async () => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 
 	const flats = await db
 		.select()
@@ -62,7 +53,7 @@ export const set_bulk_rent = command(
 		)
 	}),
 	async ({ fromYear, fromMonth, rents }) => {
-		await getOrgId();
+		requireOrgId();
 
 		let toMonth = fromMonth - 1;
 		let toYear = fromYear;

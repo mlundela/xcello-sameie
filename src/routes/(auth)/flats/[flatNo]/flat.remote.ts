@@ -1,21 +1,12 @@
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command } from '$app/server';
 import * as v from 'valibot';
-import { auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
+import { requireOrgId } from '$lib/server/tenant';
 import { flat, flatOwnership, flatRent, owner } from '$lib/schema';
 import { and, eq, desc } from 'drizzle-orm';
 
-async function getOrgId() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-	const activeOrgId = session.session.activeOrganizationId;
-	if (!activeOrgId) throw new Error('No active organization');
-	return activeOrgId;
-}
-
 export const get_flat = query(v.object({ flatNo: v.string() }), async ({ flatNo }) => {
-	const orgId = await getOrgId();
+	const orgId = requireOrgId();
 
 	const [flatRow] = await db
 		.select()
@@ -44,7 +35,7 @@ export const get_flat = query(v.object({ flatNo: v.string() }), async ({ flatNo 
 export const set_payment_responsible = command(
 	v.object({ flatNo: v.string(), ownerId: v.string() }),
 	async ({ flatNo, ownerId }) => {
-		const orgId = await getOrgId();
+		const orgId = requireOrgId();
 		const [flatRow] = await db
 			.select({ id: flat.id })
 			.from(flat)

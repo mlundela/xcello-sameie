@@ -40,6 +40,8 @@ SvelteKit 2 / Svelte 5 (runes) · Drizzle ORM + postgres-js · better-auth 1.5 �
 ### Multi-tenancy runs through better-auth's organization plugin
 One `organization` = one sameie. There is no separate tenant table: `session.activeOrganizationId` **is** the tenant context, set in the `databaseHooks.session.create.before` hook in `src/lib/server/auth.ts` (first membership wins). Every domain table carries `organizationId` and every query must filter on it.
 
+better-auth only clears `activeOrganizationId` when users remove *themselves*; a member removed by an admin keeps it. `hooks.server.ts` therefore calls `ensureActiveMembership` (`src/lib/server/tenant.ts`) on every non-`/api/auth` request, which re-points a stale session at a remaining membership or `null`. Everything downstream can trust `locals.session`.
+
 Route groups enforce access:
 - `(public)` — login, signup, invite accept
 - `(auth)` — requires session **and** an active org (else → `/organizations/new`); wraps everything in the sidebar layout
@@ -50,7 +52,7 @@ Route groups enforce access:
 ### Data access is remote functions, not load functions
 `kit.experimental.remoteFunctions` is on. Each route owns a `<name>.remote.ts` exporting `query()`/`command()` from `$app/server`, with valibot schemas for args. Conventions to follow exactly:
 
-- Every remote file defines a local `async function getOrgId()` that reads the session via `auth.api.getSession({ headers: getRequestEvent().request.headers })` and throws on missing session/org. This is duplicated across nine files on purpose-by-accident; match the existing shape rather than inventing a new abstraction mid-feature.
+- Resolve the tenant with `requireOrgId()` (or `requireSession()`) from `$lib/server/tenant`. Both read `locals.session` via `getRequestEvent()`, so they work in remote functions, `+server.ts` and `+page.server.ts` alike, and throw `error(401)`/`error(403)`. Don't call `auth.api.getSession` again; the hook already did.
 - Pages call the query directly (`const data = get_x()`) and render it inside `{#await data}` with a daisyUI `loading-spinner`.
 - Mutations use single-flight updates: `command({...}).updates(theQuery)`. Only call `query.refresh()` server-side (inside the command) when the refreshed query isn't the one the caller is awaiting.
 - `+page.server.ts` / `+server.ts` exist only where remote functions can't reach: redirect-only loads (`transaksjoner/+page.server.ts` → latest OPEN period) and binary responses (PDF reports under `rapporter/[year]/`).

@@ -1,29 +1,19 @@
 import { query, command, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
 import { auth } from '$lib/server/auth';
+import { requireOrgId, requireSession } from '$lib/server/tenant';
 
-async function getSessionAndOrg() {
-	const event = getRequestEvent();
-	const session = await auth.api.getSession({ headers: event.request.headers });
-	if (!session) throw new Error('Unauthorized');
-
-	const organizations = await auth.api.listOrganizations({ headers: event.request.headers });
-	if (organizations.length === 0) throw new Error('No organization');
-
-	const activeOrgId = session.session.activeOrganizationId;
-	const orgId =
-		activeOrgId && organizations.find((o) => o.id === activeOrgId)
-			? activeOrgId
-			: organizations[0].id;
-
-	return { session, orgId, event };
+function getSessionAndOrg() {
+	const session = requireSession();
+	const orgId = requireOrgId();
+	return { session, orgId, headers: getRequestEvent().request.headers };
 }
 
 export const get_members_data = query(async () => {
-	const { session, orgId, event } = await getSessionAndOrg();
+	const { session, orgId, headers } = getSessionAndOrg();
 
 	const fullOrg = await auth.api.getFullOrganization({
-		headers: event.request.headers,
+		headers,
 		query: { organizationId: orgId }
 	});
 
@@ -49,10 +39,10 @@ export const get_members_data = query(async () => {
 export const invite_member = command(
 	v.object({ email: v.string(), role: v.union([v.literal('admin'), v.literal('member')]) }),
 	async ({ email, role }) => {
-		const { orgId, event } = await getSessionAndOrg();
+		const { orgId, headers } = getSessionAndOrg();
 		await auth.api.createInvitation({
 			body: { email, role, organizationId: orgId },
-			headers: event.request.headers
+			headers
 		});
 		await get_members_data().refresh();
 	}
@@ -61,20 +51,20 @@ export const invite_member = command(
 export const remove_member = command(
 	v.object({ memberId: v.string() }),
 	async ({ memberId }) => {
-		const { orgId, event } = await getSessionAndOrg();
+		const { orgId, headers } = getSessionAndOrg();
 		await auth.api.removeMember({
 			body: { memberIdOrEmail: memberId, organizationId: orgId },
-			headers: event.request.headers
+			headers
 		});
 		await get_members_data().refresh();
 	}
 );
 
 export const leave_organization = command(v.object({}), async () => {
-	const { session, orgId, event } = await getSessionAndOrg();
+	const { session, orgId, headers } = getSessionAndOrg();
 
 	const fullOrg = await auth.api.getFullOrganization({
-		headers: event.request.headers,
+		headers,
 		query: { organizationId: orgId }
 	});
 
@@ -88,15 +78,15 @@ export const leave_organization = command(v.object({}), async () => {
 
 	await auth.api.leaveOrganization({
 		body: { organizationId: orgId },
-		headers: event.request.headers
+		headers
 	});
 
-	const remaining = await auth.api.listOrganizations({ headers: event.request.headers });
+	const remaining = await auth.api.listOrganizations({ headers });
 	const nextOrgId = remaining[0]?.id ?? null;
 
 	await auth.api.setActiveOrganization({
 		body: { organizationId: nextOrgId },
-		headers: event.request.headers
+		headers
 	});
 
 	return { error: null };
@@ -105,10 +95,10 @@ export const leave_organization = command(v.object({}), async () => {
 export const cancel_invite = command(
 	v.object({ invitationId: v.string() }),
 	async ({ invitationId }) => {
-		const { event } = await getSessionAndOrg();
+		const { headers } = getSessionAndOrg();
 		await auth.api.cancelInvitation({
 			body: { invitationId },
-			headers: event.request.headers
+			headers
 		});
 		await get_members_data().refresh();
 	}
