@@ -5,6 +5,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { requireOrgId } from '$lib/server/tenant';
 import type { PageServerLoad } from './$types';
 
+// The oldest OPEN period is the one still being worked on, the same period the dashboard shows
 export const load: PageServerLoad = async () => {
 	const orgId = requireOrgId();
 	const [first] = await db

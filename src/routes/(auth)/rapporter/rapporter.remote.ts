@@ -2,19 +2,19 @@ import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireOrgId } from '$lib/server/tenant';
-import { bankTransaction, owner, flatOwnership, flat, voucher, voucherLine, ledgerAccount } from '$lib/schema';
-import { eq, and, sql, isNull, or, gte, inArray } from 'drizzle-orm';
+import { accountingPeriod, owner, flatOwnership, flat } from '$lib/schema';
+import { eq, and, isNull, or, gte, desc } from 'drizzle-orm';
 import { createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
 
+// From accounting periods, not bank transactions: a new sameie must be able to enter its
+// opening balance before the first CSV import.
 export const get_rapport_years = query(async () => {
 	const orgId = requireOrgId();
 	const rows = await db
-		.selectDistinct({
-			year: sql<number>`EXTRACT(YEAR FROM ${bankTransaction.date}::date)::integer`
-		})
-		.from(bankTransaction)
-		.where(eq(bankTransaction.organizationId, orgId))
-		.orderBy(sql`1 DESC`);
+		.select({ year: accountingPeriod.year })
+		.from(accountingPeriod)
+		.where(eq(accountingPeriod.organizationId, orgId))
+		.orderBy(desc(accountingPeriod.year));
 	return rows.map((r) => r.year);
 });
 

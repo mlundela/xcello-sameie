@@ -23,7 +23,7 @@
 		<span class="loading loading-spinner"></span>
 	{:then list}
 		{#if list.length === 0}
-			<p class="text-base-content/50">Ingen transaksjoner registrert ennå.</p>
+			<p class="text-base-content/50">Ingen regnskapsperioder registrert ennå.</p>
 		{:else}
 			<div class="flex flex-col gap-8">
 				{#each list as year}

@@ -45,7 +45,7 @@ better-auth only clears `activeOrganizationId` when users remove *themselves*; a
 Route groups enforce access:
 - `(public)` — login, signup, invite accept
 - `(auth)` — requires session **and** an active org (else → `/organizations/new`); wraps everything in the sidebar layout
-- `(auth-plain)` — requires session only, no active-org requirement (org creation, husleie)
+- `(auth-plain)` — requires session only, no active-org requirement (org creation). Anything that calls `requireOrgId()` belongs in `(auth)`, or users without an org get an error instead of the redirect.
 
 `afterCreateOrganization` in `auth.ts` does the whole onboarding: fetches sections/owners from the Matrikkel API, then in one transaction always inserts `ledgerAccount` (from `DEFAULT_ACCOUNTS`) and, if Matrikkel returned data, `flat`, `owner`, `flatOwnership`, and one name-based `matchingRule` per owner. better-auth awaits the hook, so the data exists when `createOrganization` returns; no polling needed.
 
@@ -57,7 +57,7 @@ Route groups enforce access:
 - Mutations use single-flight updates: `command({...}).updates(theQuery)`. Only call `query.refresh()` server-side (inside the command) when the refreshed query isn't the one the caller is awaiting.
 - Expected failures use `error(status, 'norsk melding')` from `@sveltejs/kit`. A plain `throw new Error(...)` reaches the client as "Internal Error" (SvelteKit hides non-HttpError messages), so keep it for real bugs.
 - On the client, remote functions reject with `HttpError`, which is **not** an `Error`. Show messages with `errorMessage(err)` from `$lib/notify.svelte`. A command fired without a `catch` still surfaces: the root layout turns unhandled rejections into a toast via `showError`.
-- `+page.server.ts` / `+server.ts` exist only where remote functions can't reach: redirect-only loads (`transaksjoner/+page.server.ts` → latest OPEN period) and binary responses (PDF reports under `rapporter/[year]/`).
+- `+page.server.ts` / `+server.ts` exist only where remote functions can't reach: redirect-only loads (`/+page.server.ts` → `/dashboard` or `/login`; `transaksjoner/+page.server.ts` → oldest OPEN period, the same one the dashboard shows) and binary responses (PDF reports under `rapporter/[year]/`).
 
 ### Money is integer øre, everywhere
 Columns are named `*Ore` / `*_ore` and are `integer`. Format with `formatKr(ore)` (or `formatKr(ore, { decimals: false })`) and parse user input with `krToOre(text)` from `$lib/money`, in the UI and the PDFs alike. Don't hand-roll `Math.floor(ore / 100)`: it rounds negative amounts away from zero. CSV amounts are parsed to kroner then `Math.round(amount * 100)`.
