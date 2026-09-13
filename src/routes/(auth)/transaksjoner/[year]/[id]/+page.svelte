@@ -2,6 +2,8 @@
 	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
+	import { readAsBase64 } from '$lib/file';
+	import KategoriSelect from '../KategoriSelect.svelte';
 	import {
 		get_transaction,
 		get_attachments,
@@ -30,13 +32,6 @@
 	let userDesc = $state('');
 	let editingDesc = $state(false);
 
-	$effect(() => {
-		txQuery.then((tx) => {
-			userDesc = tx.userDescription ?? '';
-			editingDesc = false;
-		});
-	});
-
 	async function handleFileChange(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
@@ -48,12 +43,7 @@
 		uploading = true;
 		uploadError = '';
 		try {
-			const content = await new Promise<string>((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onload = () => resolve((reader.result as string).split(',')[1]);
-				reader.onerror = reject;
-				reader.readAsDataURL(file);
-			});
+			const content = await readAsBase64(file);
 			await upload_attachment({
 				transactionId: id,
 				fileName: file.name,
@@ -75,9 +65,6 @@
 	</div>
 {:then [tx, { owners }, accounts]}
 	{@const isIncome = tx.amountOre > 0}
-	{@const expenseAccounts = accounts.filter((a) => a.type === 'EXPENSE')}
-	{@const otherIncomeAccounts = accounts.filter((a) => a.type === 'INCOME' && a.code !== '3600')}
-	{@const loanAccounts = accounts.filter((a) => a.type === 'LIABILITY')}
 	{@const typeLabel = isIncome ? 'Innbetalinger' : 'Utbetalinger'}
 	{@const typeParam = isIncome ? 'income' : 'expense'}
 
@@ -133,7 +120,7 @@
 									<p class="text-sm">{tx.description}</p>
 								{/if}
 							</div>
-							<button class="btn btn-ghost btn-sm" onclick={() => (editingDesc = true)}>Endre</button>
+							<button class="btn btn-ghost btn-sm" onclick={() => { userDesc = tx.userDescription ?? ''; editingDesc = true; }}>Endre</button>
 						</div>
 					{:else}
 						<div class="flex gap-2">
@@ -174,80 +161,13 @@
 							onclick={() => unmatch_transaction({ transactionId: id }).updates(txQuery)}
 						>Fjern</button>
 					</div>
-				{:else if isIncome}
-					<select
-						class="select select-bordered select-sm"
-						onchange={(e) => {
-							const val = e.currentTarget.value;
-							if (!val) return;
-							if (val.startsWith('owner:')) {
-								match_transaction({ transactionId: id, ownerId: val.slice(6) }).updates(txQuery);
-							} else {
-								categorize_transaction({ transactionId: id, ledgerAccountId: val.slice(8) }).updates(txQuery);
-							}
-							e.currentTarget.value = '';
-						}}
-					>
-						<option value="">Velg...</option>
-						{#if owners.length > 0}
-							<optgroup label="Felleskostnader">
-								{#each owners as o}
-									<option value="owner:{o.id}">{o.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-						{#if otherIncomeAccounts.length > 0}
-							<optgroup label="Andre inntekter">
-								{#each otherIncomeAccounts as a}
-									<option value="account:{a.id}">{a.code} {a.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-						{#if loanAccounts.length > 0}
-							<optgroup label="Gjeld">
-								{#each loanAccounts as a}
-									<option value="account:{a.id}">{a.code} {a.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-					</select>
 				{:else}
-					<select
-						class="select select-bordered select-sm"
-						onchange={(e) => {
-							const val = e.currentTarget.value;
-							if (!val) return;
-							if (val.startsWith('owner:')) {
-								match_transaction({ transactionId: id, ownerId: val.slice(6) }).updates(txQuery);
-							} else {
-								categorize_transaction({ transactionId: id, ledgerAccountId: val }).updates(txQuery);
-							}
-							e.currentTarget.value = '';
-						}}
-					>
-						<option value="">Velg...</option>
-						{#if owners.length > 0}
-							<optgroup label="Tilbakebetaling til eier">
-								{#each owners as o}
-									<option value="owner:{o.id}">{o.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-						{#if expenseAccounts.length > 0}
-							<optgroup label="Utgifter">
-								{#each expenseAccounts as a}
-									<option value={a.id}>{a.code} {a.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-						{#if loanAccounts.length > 0}
-							<optgroup label="Gjeld">
-								{#each loanAccounts as a}
-									<option value={a.id}>{a.code} {a.name}</option>
-								{/each}
-							</optgroup>
-						{/if}
-					</select>
+					<KategoriSelect
+						{isIncome}
+						{owners}
+						{accounts}
+						onpick={(k) => (k.kind === 'owner' ? match_transaction({ transactionId: id, ownerId: k.ownerId }) : categorize_transaction({ transactionId: id, ledgerAccountId: k.ledgerAccountId })).updates(txQuery)}
+					/>
 				{/if}
 			</div>
 		</div>

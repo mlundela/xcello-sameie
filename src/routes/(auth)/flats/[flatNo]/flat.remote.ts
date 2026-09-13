@@ -55,6 +55,6 @@ export const set_payment_responsible = command(
 				.returning({ id: flatOwnership.id });
 			if (updated.length === 0) error(404, 'Eieren eier ikke denne leiligheten');
 		});
-		await get_flat({ flatNo }).refresh();
+		// The page refreshes get_flat via .updates()
 	}
 );

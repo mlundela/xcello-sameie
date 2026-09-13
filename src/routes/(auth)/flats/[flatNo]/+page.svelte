@@ -4,8 +4,9 @@
     import {page} from '$app/state';
     import {get_flat, set_payment_responsible} from './flat.remote';
 
-    const flatNo = page.params.flatNo ?? '';
-    const data = get_flat({flatNo});
+    // Derived: navigating from one flat to another reuses this component
+    const flatNo = $derived(page.params.flatNo!);
+    const data = $derived(get_flat({flatNo}));
 </script>
 
 <main class="max-w-xl px-6 py-8 flex flex-col gap-4">
@@ -50,7 +51,7 @@
                                         class="radio radio-sm mt-0.5"
                                         name="payment-responsible"
                                         checked={ownership.isPaymentResponsible}
-                                        onchange={() => set_payment_responsible({ flatNo, ownerId: owner.id })}
+                                        onchange={() => set_payment_responsible({ flatNo, ownerId: owner.id }).updates(data)}
                                     />
                                 {/if}
                                 <div class="flex flex-col gap-0.5">

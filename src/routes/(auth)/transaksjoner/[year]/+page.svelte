@@ -14,6 +14,8 @@
 	import { get_accounts } from '../../kontoplan/kontoplan.remote';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { readAsBase64 } from '$lib/file';
+	import KategoriSelect from './KategoriSelect.svelte';
 
 	const openPeriods = get_open_periods();
 	const rulesData = get_rules();
@@ -44,12 +46,7 @@
 		importResult = null;
 		importError = '';
 		try {
-			const base64 = await new Promise<string>((resolve, reject) => {
-				const reader = new FileReader();
-				reader.onload = () => resolve((reader.result as string).split(',')[1]);
-				reader.onerror = reject;
-				reader.readAsDataURL(file);
-			});
+			const base64 = await readAsBase64(file);
 			importResult = await import_csv({ csvBase64: base64, fileName: file.name }).updates(txQuery());
 		} catch (err: unknown) {
 			importError = errorMessage(err, 'Ukjent feil');
@@ -163,9 +160,6 @@
 			<span class="loading loading-spinner loading-lg text-primary"></span>
 		</div>
 	{:then [rows, { owners }, accounts]}
-		{@const otherIncomeAccounts = accounts.filter((a) => a.type === 'INCOME' && a.code !== '3600')}
-		{@const expenseAccounts = accounts.filter((a) => a.type === 'EXPENSE')}
-		{@const loanAccounts = accounts.filter((a) => a.type === 'LIABILITY')}
 		{#if rows.length === 0}
 			<div class="card bg-base-100">
 				<div class="card-body items-center">
@@ -201,96 +195,29 @@
 										<span class="badge badge-sm {s.cls}">{s.label}</span>
 									</td>
 									<td class="text-base-content">
-										{#if isIncome}
-											{#if row.status === 'UNMATCHED'}
-												<select
-													class="select select-bordered select-xs"
-													onchange={(e) => {
-														const val = e.currentTarget.value;
-														if (!val) return;
-														if (val.startsWith('owner:')) {
-															const ownerId = val.slice(6);
-															const ownerName = owners.find((o) => o.id === ownerId)?.name ?? '';
-															openIncomeDialog(row.id, ownerId, ownerName, row.description);
-														} else {
-															const accountId = val.slice(8);
-															categorize_transaction({ transactionId: row.id, ledgerAccountId: accountId }).updates(txQuery());
-														}
-														e.currentTarget.value = '';
-													}}
-												>
-													<option value="">Kategoriser...</option>
-													{#if owners.length > 0}
-														<optgroup label="Felleskostnader">
-															{#each owners as o}
-																<option value="owner:{o.id}">{o.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-													{#if otherIncomeAccounts.length > 0}
-														<optgroup label="Andre inntekter">
-															{#each otherIncomeAccounts as a}
-																<option value="account:{a.id}">{a.code} {a.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-													{#if loanAccounts.length > 0}
-														<optgroup label="Gjeld">
-															{#each loanAccounts as a}
-																<option value="account:{a.id}">{a.code} {a.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-												</select>
-											{:else if row.ownerName}
-												{row.ownerName}
-											{:else if row.status === 'CATEGORIZED'}
-												{row.ledgerAccountCode} {row.ledgerAccountName}
-											{/if}
-										{:else}
-											{#if row.status === 'UNMATCHED'}
-												<select
-													class="select select-bordered select-xs"
-													onchange={(e) => {
-														const val = e.currentTarget.value;
-														if (!val) return;
-														if (val.startsWith('owner:')) {
-															match_transaction({ transactionId: row.id, ownerId: val.slice(6) }).updates(txQuery());
-														} else {
-															const accountName = expenseAccounts.find((a) => a.id === val)?.name ?? '';
-															openExpenseDialog(row.id, val, accountName, row.description);
-														}
-														e.currentTarget.value = '';
-													}}
-												>
-													<option value="">Velg...</option>
-													{#if owners.length > 0}
-														<optgroup label="Tilbakebetaling til eier">
-															{#each owners as o}
-																<option value="owner:{o.id}">{o.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-													{#if expenseAccounts.length > 0}
-														<optgroup label="Utgifter">
-															{#each expenseAccounts as a}
-																<option value={a.id}>{a.code} {a.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-													{#if loanAccounts.length > 0}
-														<optgroup label="Gjeld">
-															{#each loanAccounts as a}
-																<option value={a.id}>{a.code} {a.name}</option>
-															{/each}
-														</optgroup>
-													{/if}
-												</select>
-											{:else if row.ownerName}
-												{row.ownerName}
-											{:else if row.ledgerAccountName}
-												{row.ledgerAccountCode} {row.ledgerAccountName}
-											{/if}
+										{#if row.status === 'UNMATCHED'}
+											<KategoriSelect
+												{isIncome}
+												{owners}
+												{accounts}
+												class="select-xs"
+												placeholder={isIncome ? 'Kategoriser...' : 'Velg...'}
+												onpick={(k) => {
+													// Picking an owner on an inflow, or an account on an outflow, offers to create a matching rule
+													if (k.kind === 'owner') {
+														if (isIncome) openIncomeDialog(row.id, k.ownerId, k.ownerName, row.description);
+														else match_transaction({ transactionId: row.id, ownerId: k.ownerId }).updates(txQuery());
+													} else if (isIncome) {
+														categorize_transaction({ transactionId: row.id, ledgerAccountId: k.ledgerAccountId }).updates(txQuery());
+													} else {
+														openExpenseDialog(row.id, k.ledgerAccountId, k.accountName, row.description);
+													}
+												}}
+											/>
+										{:else if row.ownerName}
+											{row.ownerName}
+										{:else if row.ledgerAccountName}
+											{row.ledgerAccountCode} {row.ledgerAccountName}
 										{/if}
 									</td>
 								</tr>
