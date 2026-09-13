@@ -1,7 +1,7 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireOrgId } from '$lib/server/tenant';
 import {
 	bankTransaction,
 	bankStatement,
@@ -402,6 +402,7 @@ export const match_transaction = command(
 	v.object({ transactionId: v.string(), ownerId: v.string() }),
 	async ({ transactionId, ownerId }) => {
 		const orgId = requireOrgId();
+		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
 		await db.transaction(async (tx) => {
@@ -445,6 +446,7 @@ export const create_rule_and_apply = command(
 	}),
 	async ({ pattern, ownerId, receiptNotRequired, userDescription }) => {
 		const orgId = requireOrgId();
+		await assertInOrg(owner, [ownerId], orgId);
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) throw new Error('Mangler konto 3600 i kontoplanen');
 		const matched = await db.transaction(async (tx) => {
@@ -501,6 +503,7 @@ export const create_expense_rule_and_apply = command(
 	}),
 	async ({ pattern, ledgerAccountId, receiptNotRequired, userDescription }) => {
 		const orgId = requireOrgId();
+		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		const categorized = await db.transaction(async (tx) => {
 			await tx
 				.insert(matchingRule)
@@ -547,13 +550,15 @@ export const create_expense_rule_and_apply = command(
 export const unmatch_transaction = command(
 	v.object({ transactionId: v.string() }),
 	async ({ transactionId }) => {
-		requireOrgId();
+		const orgId = requireOrgId();
 		await db.transaction(async (tx) => {
-			await deleteBankAutoVoucher(tx, transactionId);
-			await tx
+			const updated = await tx
 				.update(bankTransaction)
 				.set({ matchedOwnerId: null, ledgerAccountId: null, status: 'UNMATCHED' })
-				.where(eq(bankTransaction.id, transactionId));
+				.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)))
+				.returning({ id: bankTransaction.id });
+			if (updated.length === 0) throw new Error('Transaksjon ikke funnet');
+			await deleteBankAutoVoucher(tx, transactionId);
 		});
 		// Client refreshes via .updates()
 	}
@@ -563,6 +568,7 @@ export const categorize_transaction = command(
 	v.object({ transactionId: v.string(), ledgerAccountId: v.string() }),
 	async ({ transactionId, ledgerAccountId }) => {
 		const orgId = requireOrgId();
+		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		await db.transaction(async (tx) => {
 			await deleteBankAutoVoucher(tx, transactionId);
 			const [row] = await tx

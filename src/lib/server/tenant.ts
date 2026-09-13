@@ -1,9 +1,9 @@
 import { error } from '@sveltejs/kit';
 import { getRequestEvent } from '$app/server';
-import { eq } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 import { auth } from './auth';
 import { db } from './db';
-import { member } from '$lib/schema';
+import { flat, ledgerAccount, member, owner } from '$lib/schema';
 
 type Session = NonNullable<App.Locals['session']>;
 
@@ -38,4 +38,19 @@ export function requireOrgId(): string {
 	const orgId = requireSession().session.activeOrganizationId;
 	if (!orgId) error(403, 'Ingen aktivt sameie');
 	return orgId;
+}
+
+/** Throws 404 unless every id is a row of `table` in the org. Use on any id that comes from the client. */
+export async function assertInOrg(
+	table: typeof owner | typeof ledgerAccount | typeof flat,
+	ids: string[],
+	orgId: string
+) {
+	const unique = [...new Set(ids)];
+	if (unique.length === 0) return;
+	const [{ n }] = await db
+		.select({ n: count() })
+		.from(table)
+		.where(and(eq(table.organizationId, orgId), inArray(table.id, unique)));
+	if (n !== unique.length) error(404, 'Ikke funnet');
 }

@@ -42,14 +42,18 @@ export const set_payment_responsible = command(
 			.where(and(eq(flat.organizationId, orgId), eq(flat.flatNo, flatNo)))
 			.limit(1);
 		if (!flatRow) throw new Error('Ikke funnet');
-		await db
-			.update(flatOwnership)
-			.set({ isPaymentResponsible: false })
-			.where(eq(flatOwnership.flatId, flatRow.id));
-		await db
-			.update(flatOwnership)
-			.set({ isPaymentResponsible: true })
-			.where(and(eq(flatOwnership.flatId, flatRow.id), eq(flatOwnership.ownerId, ownerId)));
+		await db.transaction(async (tx) => {
+			await tx
+				.update(flatOwnership)
+				.set({ isPaymentResponsible: false })
+				.where(eq(flatOwnership.flatId, flatRow.id));
+			const updated = await tx
+				.update(flatOwnership)
+				.set({ isPaymentResponsible: true })
+				.where(and(eq(flatOwnership.flatId, flatRow.id), eq(flatOwnership.ownerId, ownerId)))
+				.returning({ id: flatOwnership.id });
+			if (updated.length === 0) throw new Error('Eieren eier ikke denne leiligheten');
+		});
 		await get_flat({ flatNo }).refresh();
 	}
 );

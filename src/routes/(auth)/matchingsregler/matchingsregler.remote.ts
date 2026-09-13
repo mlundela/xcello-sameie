@@ -1,7 +1,7 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireOrgId } from '$lib/server/tenant';
 import { matchingRule, owner, flat, flatOwnership } from '$lib/schema';
 import { eq, isNull, and } from 'drizzle-orm';
 import { generateId } from 'better-auth';
@@ -39,6 +39,7 @@ export const create_rule = command(
 	}),
 	async ({ pattern, ownerId }) => {
 		const orgId = requireOrgId();
+		await assertInOrg(owner, [ownerId], orgId);
 		await db.insert(matchingRule).values({ id: generateId(), organizationId: orgId, pattern, ownerId });
 		await get_rules().refresh();
 	}
@@ -47,8 +48,8 @@ export const create_rule = command(
 export const delete_rule = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
-		requireOrgId();
-		await db.delete(matchingRule).where(eq(matchingRule.id, id));
+		const orgId = requireOrgId();
+		await db.delete(matchingRule).where(and(eq(matchingRule.id, id), eq(matchingRule.organizationId, orgId)));
 		await get_rules().refresh();
 	}
 );

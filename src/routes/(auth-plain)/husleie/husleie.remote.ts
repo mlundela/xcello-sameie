@@ -1,7 +1,7 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { requireOrgId } from '$lib/server/tenant';
+import { assertInOrg, requireOrgId } from '$lib/server/tenant';
 import { flat, flatRent } from '$lib/schema';
 import { and, eq, isNull, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
@@ -53,7 +53,8 @@ export const set_bulk_rent = command(
 		)
 	}),
 	async ({ fromYear, fromMonth, rents }) => {
-		requireOrgId();
+		const orgId = requireOrgId();
+		await assertInOrg(flat, rents.map((r) => r.flatId), orgId);
 
 		let toMonth = fromMonth - 1;
 		let toYear = fromYear;

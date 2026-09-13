@@ -1,9 +1,9 @@
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { requireOrgId } from '$lib/server/tenant';
-import { ledgerAccount, bankTransaction } from '$lib/schema';
-import { eq, count } from 'drizzle-orm';
+import { assertInOrg, requireOrgId } from '$lib/server/tenant';
+import { ledgerAccount, bankTransaction, voucherLine, matchingRule } from '$lib/schema';
+import { and, eq, count } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
 
@@ -32,13 +32,15 @@ export const create_account = command(
 export const delete_account = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
-		requireOrgId();
-		const [{ used }] = await db
-			.select({ used: count() })
-			.from(bankTransaction)
-			.where(eq(bankTransaction.ledgerAccountId, id));
-		if (used > 0) throw new Error('Kontoen er i bruk og kan ikke slettes');
-		await db.delete(ledgerAccount).where(eq(ledgerAccount.id, id));
+		const orgId = requireOrgId();
+		await assertInOrg(ledgerAccount, [id], orgId);
+		const usage = await Promise.all([
+			db.select({ n: count() }).from(bankTransaction).where(eq(bankTransaction.ledgerAccountId, id)),
+			db.select({ n: count() }).from(voucherLine).where(eq(voucherLine.ledgerAccountId, id)),
+			db.select({ n: count() }).from(matchingRule).where(eq(matchingRule.ledgerAccountId, id))
+		]);
+		if (usage.some(([{ n }]) => n > 0)) throw new Error('Kontoen er i bruk og kan ikke slettes');
+		await db.delete(ledgerAccount).where(and(eq(ledgerAccount.id, id), eq(ledgerAccount.organizationId, orgId)));
 		await get_accounts().refresh();
 	}
 );
