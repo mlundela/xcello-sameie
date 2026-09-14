@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { query, command } from '$app/server';
+import { query, command, requested } from '$app/server';
 import * as v from 'valibot';
 import { generateId } from 'better-auth';
 import { db } from '$lib/server/db';
@@ -53,7 +53,7 @@ export const set_payment_responsible = command(
 				.returning({ id: flatOwnership.id });
 			if (updated.length === 0) error(404, 'Eieren eier ikke denne leiligheten');
 		});
-		// The page refreshes get_flat via .updates()
+		await requested(get_flat, 5).refreshAll();
 	}
 );
 
@@ -149,6 +149,6 @@ export const record_ownership_change = command(
 				});
 			}
 		});
-		// The page refreshes get_flat via .updates()
+		await requested(get_flat, 5).refreshAll();
 	}
 );

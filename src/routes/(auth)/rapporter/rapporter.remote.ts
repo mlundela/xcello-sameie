@@ -1,4 +1,4 @@
-import { query, command } from '$app/server';
+import { query, command, requested } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
@@ -156,6 +156,7 @@ export const open_next_year = command(v.object({}), async () => {
 		if (created.length === 0) error(409, `Regnskapsår ${year} finnes allerede`);
 		await createOpeningVoucher(tx, { organizationId: orgId, year, ...closing });
 	});
+	await requested(get_rapport_years, 5).refreshAll();
 	return { year };
 });
 
@@ -172,5 +173,6 @@ export const carry_forward_opening_balance = command(
 
 		const closing = await closingBalances(orgId, year - 1);
 		await db.transaction((tx) => createOpeningVoucher(tx, { organizationId: orgId, year, ...closing }));
+		await Promise.all([requested(get_opening_balance, 5).refreshAll(), requested(get_owner_opening_balances, 5).refreshAll()]);
 	}
 );

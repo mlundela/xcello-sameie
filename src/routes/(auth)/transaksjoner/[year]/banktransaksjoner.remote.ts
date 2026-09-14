@@ -268,7 +268,7 @@ export const import_csv = command(
 			}
 		});
 
-		await get_statements().refresh();
+		await Promise.all([get_statements().refresh(), refreshTransactions()]);
 
 		return { imported: toInsert.length, skipped: skippedCount };
 	}
@@ -301,6 +301,11 @@ async function unmatchedWonBy(tx: Tx, orgId: string, pattern: string) {
 			.where(and(eq(bankTransaction.organizationId, orgId), eq(bankTransaction.status, 'UNMATCHED'), ilike(bankTransaction.description, containsPattern(pattern))))
 	]);
 	return candidates.filter((c) => findRule(rules, c.description, c.amountOre)?.pattern.toLowerCase() === pattern.toLowerCase());
+}
+
+// Kit 2.70 refreshes the queries a page passes to .updates() only when the command asks for them
+function refreshTransactions() {
+	return Promise.all([requested(get_transactions, 5).refreshAll(), requested(get_transaction, 5).refreshAll()]);
 }
 
 async function get3600AccountId(orgId: string): Promise<string | null> {
@@ -347,7 +352,7 @@ export const match_transaction = command(
 				description: row.userDescription ?? row.description
 			});
 		});
-		// Client refreshes via .updates()
+		await refreshTransactions();
 	}
 );
 
@@ -391,6 +396,7 @@ export const create_rule_and_apply = command(
 			);
 			return rows.length;
 		});
+		await refreshTransactions();
 		return { matched };
 	}
 );
@@ -432,6 +438,7 @@ export const create_expense_rule_and_apply = command(
 			);
 			return rows.length;
 		});
+		await refreshTransactions();
 		return { categorized };
 	}
 );
@@ -449,7 +456,7 @@ export const unmatch_transaction = command(
 			if (updated.length === 0) error(404, 'Transaksjon ikke funnet');
 			await deleteBankAutoVoucher(tx, transactionId);
 		});
-		// Client refreshes via .updates()
+		await refreshTransactions();
 	}
 );
 
@@ -485,7 +492,7 @@ export const categorize_transaction = command(
 				description: row.userDescription ?? row.description
 			});
 		});
-		// Client refreshes via .updates()
+		await refreshTransactions();
 	}
 );
 
@@ -497,6 +504,7 @@ export const update_description = command(
 			.update(bankTransaction)
 			.set({ userDescription })
 			.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)));
+		await refreshTransactions();
 	}
 );
 
@@ -555,6 +563,7 @@ export const delete_attachment = command(
 		await db
 			.delete(attachment)
 			.where(and(eq(attachment.id, attachmentId), eq(attachment.organizationId, orgId)));
+		await requested(get_attachments, 5).refreshAll();
 	}
 );
 
@@ -566,5 +575,6 @@ export const set_receipt_not_required = command(
 			.update(bankTransaction)
 			.set({ receiptNotRequired: value })
 			.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)));
+		await refreshTransactions();
 	}
 );

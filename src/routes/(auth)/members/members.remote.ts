@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { query, command, getRequestEvent } from '$app/server';
+import { query, command, getRequestEvent, requested } from '$app/server';
 import * as v from 'valibot';
 import { auth } from '$lib/server/auth';
 import { requireAdmin, requireOrgId, requireSession } from '$lib/server/tenant';
@@ -73,6 +73,7 @@ export const update_member_role = command(
 		}
 
 		await auth.api.updateMemberRole({ body: { memberId, role, organizationId: orgId }, headers });
+		await requested(get_members_data, 5).refreshAll();
 	}
 );
 
