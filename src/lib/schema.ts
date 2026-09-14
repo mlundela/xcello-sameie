@@ -1,4 +1,4 @@
-import { pgTable, text, boolean, timestamp, integer, date, uniqueIndex, index, check } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, timestamp, integer, date, uniqueIndex, index, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 export const user = pgTable('user', {
@@ -190,7 +190,9 @@ export const voucher = pgTable('voucher', {
 	fiscalYear: integer('fiscal_year').notNull(),
 	date: date('date').notNull(),
 	description: text('description').notNull(),
-	source: text('source').notNull().default('BANK_AUTO'), // 'BANK_AUTO' | 'OPENING' | 'MANUAL'
+	source: text('source').notNull().default('BANK_AUTO'), // 'BANK_AUTO' | 'OPENING' | 'CORRECTION' | 'MANUAL'
+	// A correction voucher points at the voucher it reverses (the previous OPENING voucher for opening balances)
+	reversesVoucherId: text('reverses_voucher_id').references((): AnyPgColumn => voucher.id, { onDelete: 'cascade' }),
 	createdAt: timestamp('created_at').notNull()
 }, (t) => [
 	uniqueIndex('voucher_org_year_number_idx').on(t.organizationId, t.fiscalYear, t.voucherNumber),

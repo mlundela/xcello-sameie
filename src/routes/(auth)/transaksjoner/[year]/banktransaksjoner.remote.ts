@@ -14,7 +14,7 @@ import {
 } from '$lib/schema';
 import { eq, and, or, sql, count, inArray, isNull, ilike, gt, gte, lt, lte, asc, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
-import { createBankAutoVoucher, createBankAutoVouchers, deleteBankAutoVoucher } from '$lib/server/voucher';
+import { createBankAutoVoucher, createBankAutoVouchers, reverseBankAutoVoucher } from '$lib/server/voucher';
 import { inMonth, inYear } from '$lib/server/period';
 import { findRule, upsertRule } from '$lib/server/matching';
 import { decodeBuffer, detectAndParse } from '$lib/server/csv';
@@ -338,7 +338,7 @@ export const match_transaction = command(
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
 		await db.transaction(async (tx) => {
-			await deleteBankAutoVoucher(tx, transactionId);
+			await reverseBankAutoVoucher(tx, transactionId);
 			const [row] = await tx
 				.select({
 					date: bankTransaction.date,
@@ -467,7 +467,7 @@ export const unmatch_transaction = command(
 				.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)))
 				.returning({ id: bankTransaction.id });
 			if (updated.length === 0) error(404, 'Transaksjon ikke funnet');
-			await deleteBankAutoVoucher(tx, transactionId);
+			await reverseBankAutoVoucher(tx, transactionId);
 		});
 		await refreshTransactions();
 	}
@@ -479,7 +479,7 @@ export const categorize_transaction = command(
 		const orgId = requireAdmin();
 		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		await db.transaction(async (tx) => {
-			await deleteBankAutoVoucher(tx, transactionId);
+			await reverseBankAutoVoucher(tx, transactionId);
 			const [row] = await tx
 				.select({
 					date: bankTransaction.date,

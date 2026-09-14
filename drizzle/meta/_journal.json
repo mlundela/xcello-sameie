@@ -29,6 +29,13 @@
       "when": 1789371057519,
       "tag": "0003_friendly_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789401946205,
+      "tag": "0004_condemned_silvermane",
+      "breakpoints": true
     }
   ]
 }

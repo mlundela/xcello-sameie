@@ -1,0 +1,2 @@
+ALTER TABLE "voucher" ADD COLUMN "reverses_voucher_id" text;--> statement-breakpoint
+ALTER TABLE "voucher" ADD CONSTRAINT "voucher_reverses_voucher_id_voucher_id_fk" FOREIGN KEY ("reverses_voucher_id") REFERENCES "public"."voucher"("id") ON DELETE cascade ON UPDATE no action;

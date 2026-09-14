@@ -19,20 +19,21 @@ Dette dokumentet beskriver arkitektoniske svakheter og mangler i nåværende dat
 ```
 voucher
 ├── id, organizationId, voucherNumber (per fiscalYear), fiscalYear
-├── date, description, source ('BANK_AUTO' | 'OPENING' | 'MANUAL')
+├── date, description, source ('BANK_AUTO' | 'OPENING' | 'CORRECTION' | 'MANUAL'), reversesVoucherId
 └── voucher_line[]
     ├── ledgerAccountId
     ├── debitOre, creditOre  (ett av dem > 0 per linje)
     └── ownerId (valgfri, for innbetalings-/refusjonslinjer mot 3600)
 
 bank_transaction
-└── voucherId  (1:1-kobling til auto-generert bilag)
+└── voucherId  (kobling til gjeldende auto-generert bilag)
 ```
 
 **Invariants** (håndheves i `src/lib/server/voucher.ts`):
 - `SUM(debitOre) === SUM(creditOre)` per voucher (balanseligningen)
 - BANK_AUTO-bilag har nøyaktig 2 linjer der én side er bankkonto (1920)
 - `voucherNumber` er fortløpende per (organizationId, fiscalYear)
+- Bokførte bilag slettes aldri. Omkategorisering gir et CORRECTION-bilag som motposterer det gamle (samme dato, `reversesVoucherId`) og et nytt bilag; endret inngående saldo gir et OPENING-korreksjonsbilag. Korreksjonene vises ikke i UI og går i null i rapportene.
 
 ---
 

@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { db } from './db';
 import { voucher, voucherLine, ledgerAccount, bankTransaction } from '$lib/schema';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, asc, desc, sql } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -160,102 +160,122 @@ export async function readOpeningState(
 	return { bankOre, loanOre, ownerBalances };
 }
 
-export async function createOpeningVoucher(
-	tx: Tx,
-	opts: {
-		organizationId: string;
-		year: number;
-		bankOre: number;
-		loanOre: number;
-		ownerBalances: Array<{ ownerId: string; balanceOre: number }>;
+type OpeningState = { bankOre: number; loanOre: number; ownerBalances: Array<{ ownerId: string; balanceOre: number }> };
+type Posting = Pick<typeof voucherLine.$inferInsert, 'ledgerAccountId' | 'debitOre' | 'creditOre' | 'ownerId'>;
+type OpeningAccounts = Record<'1920' | '2400' | '1500' | '2050' | '2770', string>;
+
+/** Two lines per amount against equity (2050): bank on 1920, loan on 2400, an owner on 1500 (owes) or 2770 (prepaid). */
+function openingPostings(acc: OpeningAccounts, state: OpeningState): Posting[] {
+	const pair = (debitAccount: string, creditAccount: string, amount: number, ownerId: string | null = null, ownerOnDebit = false): Posting[] => [
+		{ ledgerAccountId: debitAccount, debitOre: amount, creditOre: 0, ownerId: ownerOnDebit ? ownerId : null },
+		{ ledgerAccountId: creditAccount, debitOre: 0, creditOre: amount, ownerId: ownerOnDebit ? null : ownerId }
+	];
+	const postings: Posting[] = [];
+	if (state.bankOre > 0) postings.push(...pair(acc['1920'], acc['2050'], state.bankOre));
+	if (state.bankOre < 0) postings.push(...pair(acc['2050'], acc['1920'], -state.bankOre));
+	if (state.loanOre > 0) postings.push(...pair(acc['2050'], acc['2400'], state.loanOre));
+	if (state.loanOre < 0) postings.push(...pair(acc['2400'], acc['2050'], -state.loanOre));
+	for (const { ownerId, balanceOre } of state.ownerBalances) {
+		if (balanceOre < 0) postings.push(...pair(acc['1500'], acc['2050'], -balanceOre, ownerId, true));
+		if (balanceOre > 0) postings.push(...pair(acc['2050'], acc['2770'], balanceOre, ownerId));
 	}
-): Promise<string> {
-	await tx.delete(voucher).where(
-		and(eq(voucher.organizationId, opts.organizationId), eq(voucher.fiscalYear, opts.year), eq(voucher.source, 'OPENING'))
-	);
-
-	const [acc1920, acc2400, acc1500, acc2050, acc2770] = await Promise.all([
-		getAccountIdByCode(tx, opts.organizationId, '1920'),
-		getAccountIdByCode(tx, opts.organizationId, '2400'),
-		getAccountIdByCode(tx, opts.organizationId, '1500'),
-		getAccountIdByCode(tx, opts.organizationId, '2050'),
-		getAccountIdByCode(tx, opts.organizationId, '2770')
-	]);
-
-	const voucherNumber = await reserveVoucherNumbers(tx, opts.organizationId, opts.year);
-	const voucherId = generateId();
-
-	await tx.insert(voucher).values({
-		id: voucherId,
-		organizationId: opts.organizationId,
-		voucherNumber,
-		fiscalYear: opts.year,
-		date: `${opts.year}-01-01`,
-		description: `Inngående saldo ${opts.year}`,
-		source: 'OPENING',
-		createdAt: new Date()
-	});
-
-	const lines: (typeof voucherLine.$inferInsert)[] = [];
-	let n = 1;
-
-	if (opts.bankOre !== 0) {
-		const abs = Math.abs(opts.bankOre);
-		const [debitAcc, creditAcc] = opts.bankOre > 0 ? [acc1920, acc2050] : [acc2050, acc1920];
-		lines.push(
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: debitAcc, debitOre: abs, creditOre: 0, ownerId: null },
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: creditAcc, debitOre: 0, creditOre: abs, ownerId: null }
-		);
-	}
-
-	if (opts.loanOre !== 0) {
-		const abs = Math.abs(opts.loanOre);
-		const [debitAcc, creditAcc] = opts.loanOre > 0 ? [acc2050, acc2400] : [acc2400, acc2050];
-		lines.push(
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: debitAcc, debitOre: abs, creditOre: 0, ownerId: null },
-			{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: creditAcc, debitOre: 0, creditOre: abs, ownerId: null }
-		);
-	}
-
-	for (const { ownerId, balanceOre } of opts.ownerBalances) {
-		if (balanceOre === 0) continue;
-		const abs = Math.abs(balanceOre);
-		if (balanceOre < 0) {
-			lines.push(
-				{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc1500, debitOre: abs, creditOre: 0, ownerId },
-				{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc2050, debitOre: 0, creditOre: abs, ownerId: null }
-			);
-		} else {
-			lines.push(
-				{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc2050, debitOre: abs, creditOre: 0, ownerId: null },
-				{ id: generateId(), voucherId, lineNumber: n++, ledgerAccountId: acc2770, debitOre: 0, creditOre: abs, ownerId }
-			);
-		}
-	}
-
-	if (lines.length > 0) await tx.insert(voucherLine).values(lines);
-
-	return voucherId;
+	return postings;
 }
 
 /**
- * Sletter bilaget koblet til en bank-transaksjon (cascade fjerner linjene).
- * Trygt å kalle selv om transaksjonen ikke har et bilag.
+ * Sets a year's opening balances to `opts`. The first call posts the OPENING voucher. Later calls never
+ * delete it (bokføringsloven: posted vouchers stay traceable): they post an OPENING correction, linked
+ * to the previous one, that reverses the old value of each part that changed (bank, loan, an owner)
+ * and posts the new value, so every account ends up right. Nothing changed, nothing posted.
  */
-export async function deleteBankAutoVoucher(
-	tx: DbOrTx,
-	bankTransactionId: string
-): Promise<void> {
-	const [row] = await tx
-		.select({ voucherId: bankTransaction.voucherId })
+export async function createOpeningVoucher(tx: Tx, opts: { organizationId: string; year: number } & OpeningState): Promise<void> {
+	const { organizationId, year } = opts;
+	const [previous] = await tx
+		.select({ id: voucher.id })
+		.from(voucher)
+		.where(and(eq(voucher.organizationId, organizationId), eq(voucher.fiscalYear, year), eq(voucher.source, 'OPENING')))
+		.orderBy(desc(voucher.voucherNumber))
+		.limit(1);
+	const current = (await readOpeningState(tx, organizationId, year)) ?? { bankOre: 0, loanOre: 0, ownerBalances: [] };
+
+	const was = new Map(current.ownerBalances.map((o) => [o.ownerId, o.balanceOre]));
+	const becomes = new Map(opts.ownerBalances.map((o) => [o.ownerId, o.balanceOre]));
+	const changedOwners = [...new Set([...was.keys(), ...becomes.keys()])].filter((id) => (was.get(id) ?? 0) !== (becomes.get(id) ?? 0));
+	const changedParts = (bankOre: number, loanOre: number, owners: Map<string, number>): OpeningState => ({
+		bankOre: current.bankOre !== opts.bankOre ? bankOre : 0,
+		loanOre: current.loanOre !== opts.loanOre ? loanOre : 0,
+		ownerBalances: changedOwners.map((ownerId) => ({ ownerId, balanceOre: owners.get(ownerId) ?? 0 }))
+	});
+
+	const codes = ['1920', '2400', '1500', '2050', '2770'] as const;
+	const ids = await Promise.all(codes.map((code) => getAccountIdByCode(tx, organizationId, code)));
+	const acc = Object.fromEntries(codes.map((code, i) => [code, ids[i]])) as OpeningAccounts;
+	const postings = [
+		...openingPostings(acc, changedParts(current.bankOre, current.loanOre, was)).map((p) => ({ ...p, debitOre: p.creditOre, creditOre: p.debitOre })),
+		...openingPostings(acc, changedParts(opts.bankOre, opts.loanOre, becomes))
+	];
+	// The first OPENING voucher is posted even without lines: the balance report requires one
+	if (previous && postings.length === 0) return;
+
+	const voucherId = generateId();
+	await tx.insert(voucher).values({
+		id: voucherId,
+		organizationId,
+		voucherNumber: await reserveVoucherNumbers(tx, organizationId, year),
+		fiscalYear: year,
+		date: `${year}-01-01`,
+		description: previous ? `Korreksjon av inngående saldo ${year}` : `Inngående saldo ${year}`,
+		source: 'OPENING',
+		reversesVoucherId: previous?.id ?? null,
+		createdAt: new Date()
+	});
+	if (postings.length > 0) {
+		await tx.insert(voucherLine).values(postings.map((p, i) => ({ ...p, id: generateId(), voucherId, lineNumber: i + 1 })));
+	}
+}
+
+/**
+ * Reverses a bank transaction's voucher before it is re-categorised or unmatched: posts a CORRECTION
+ * voucher with the lines swapped, linked to the original and on its date (so the same fiscal year),
+ * and clears bankTransaction.voucherId. The original is kept, so history and numbering stay intact.
+ * Safe to call when the transaction has no voucher.
+ */
+export async function reverseBankAutoVoucher(tx: Tx, bankTransactionId: string): Promise<void> {
+	const [original] = await tx
+		.select({
+			id: voucher.id,
+			organizationId: voucher.organizationId,
+			fiscalYear: voucher.fiscalYear,
+			voucherNumber: voucher.voucherNumber,
+			date: voucher.date,
+			description: voucher.description
+		})
 		.from(bankTransaction)
+		.innerJoin(voucher, eq(voucher.id, bankTransaction.voucherId))
 		.where(eq(bankTransaction.id, bankTransactionId))
 		.limit(1);
-	if (!row?.voucherId) return;
+	if (!original) return;
 
-	await tx
-		.update(bankTransaction)
-		.set({ voucherId: null })
-		.where(eq(bankTransaction.id, bankTransactionId));
-	await tx.delete(voucher).where(eq(voucher.id, row.voucherId));
+	const lines = await tx
+		.select({ ledgerAccountId: voucherLine.ledgerAccountId, debitOre: voucherLine.debitOre, creditOre: voucherLine.creditOre, ownerId: voucherLine.ownerId })
+		.from(voucherLine)
+		.where(eq(voucherLine.voucherId, original.id))
+		.orderBy(asc(voucherLine.lineNumber));
+
+	const voucherId = generateId();
+	await tx.insert(voucher).values({
+		id: voucherId,
+		organizationId: original.organizationId,
+		voucherNumber: await reserveVoucherNumbers(tx, original.organizationId, original.fiscalYear),
+		fiscalYear: original.fiscalYear,
+		date: original.date,
+		description: `Korreksjon av bilag ${original.voucherNumber}: ${original.description}`,
+		source: 'CORRECTION',
+		reversesVoucherId: original.id,
+		createdAt: new Date()
+	});
+	await tx.insert(voucherLine).values(
+		lines.map((l, i) => ({ ...l, id: generateId(), voucherId, lineNumber: i + 1, debitOre: l.creditOre, creditOre: l.debitOre }))
+	);
+	await tx.update(bankTransaction).set({ voucherId: null }).where(eq(bankTransaction.id, bankTransactionId));
 }

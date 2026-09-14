@@ -3,11 +3,11 @@
 import '$lib/server/migrate';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { generateId } from 'better-auth';
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import * as s from '$lib/schema';
 import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
-import { createBankAutoVouchers, createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
+import { createBankAutoVoucher, createBankAutoVouchers, createOpeningVoucher, readOpeningState, reverseBankAutoVoucher } from '$lib/server/voucher';
 import { expectedRentByOwner, setRentFrom } from '$lib/server/rent';
 import { ownerLedger } from '$lib/server/balances';
 import { landingMembership } from '$lib/server/membership';
@@ -47,7 +47,8 @@ afterAll(async () => {
 	if (createdUsers.length > 0) await db.delete(s.user).where(inArray(s.user.id, createdUsers));
 	if (createdOrgs.length > 0) {
 		// Dependency order: an organization delete alone trips voucher_line -> ledger_account
-		// (and flat_ownership -> owner), whose foreign keys have no ON DELETE action
+		// (and flat_ownership -> owner, bank_transaction -> voucher), whose foreign keys have no ON DELETE action
+		await db.delete(s.bankTransaction).where(inArray(s.bankTransaction.organizationId, createdOrgs));
 		await db.delete(s.voucher).where(inArray(s.voucher.organizationId, createdOrgs));
 		await db.delete(s.flat).where(inArray(s.flat.organizationId, createdOrgs));
 		await db.delete(s.organization).where(inArray(s.organization.id, createdOrgs));
@@ -109,6 +110,93 @@ describe('vouchers', () => {
 				[prepaid, 45000]
 			])
 		);
+	});
+});
+
+describe('corrections keep posted vouchers', () => {
+	const vouchersOf = (orgId: string) =>
+		db
+			.select({ id: s.voucher.id, n: s.voucher.voucherNumber, source: s.voucher.source, reverses: s.voucher.reversesVoucherId })
+			.from(s.voucher)
+			.where(eq(s.voucher.organizationId, orgId))
+			.orderBy(asc(s.voucher.voucherNumber));
+	const netOn = async (orgId: string, code: string, ownerId?: string) => {
+		const [row] = await db
+			.select({ net: sql<string>`coalesce(sum(${s.voucherLine.debitOre} - ${s.voucherLine.creditOre}), 0)` })
+			.from(s.voucherLine)
+			.innerJoin(s.voucher, eq(s.voucher.id, s.voucherLine.voucherId))
+			.innerJoin(s.ledgerAccount, eq(s.ledgerAccount.id, s.voucherLine.ledgerAccountId))
+			.where(and(eq(s.voucher.organizationId, orgId), eq(s.ledgerAccount.code, code), ownerId ? eq(s.voucherLine.ownerId, ownerId) : undefined));
+		return Number(row.net);
+	};
+	const unbalanced = (orgId: string) =>
+		db.execute(sql`select v.id from voucher v join voucher_line l on l.voucher_id = v.id where v.organization_id = ${orgId} group by v.id having sum(l.debit_ore) <> sum(l.credit_ore)`);
+
+	test('changing opening balances adds a correction and leaves each account right', async () => {
+		const t = await testSameie();
+		const owes = await t.owner('Skylder');
+		const prepaid = await t.owner('Forskudd');
+		const setOpening = (bankOre: number, owesOre: number) =>
+			db.transaction((tx) =>
+				createOpeningVoucher(tx, {
+					organizationId: t.orgId,
+					year: 2026,
+					bankOre,
+					loanOre: 500000,
+					ownerBalances: [
+						{ ownerId: owes, balanceOre: owesOre },
+						{ ownerId: prepaid, balanceOre: 45000 }
+					]
+				})
+			);
+
+		await setOpening(-250000, -30000);
+		await setOpening(100000, 20000); // bank changes and the owner goes from owing to prepaid
+		await setOpening(100000, 20000); // nothing changes, nothing is posted
+
+		const vouchers = await vouchersOf(t.orgId);
+		expect(vouchers.map((v) => [v.n, v.source, v.reverses])).toEqual([
+			[1, 'OPENING', null],
+			[2, 'OPENING', vouchers[0].id]
+		]);
+		const state = await readOpeningState(db, t.orgId, 2026);
+		expect(state).toMatchObject({ bankOre: 100000, loanOre: 500000 });
+		expect(new Map(state?.ownerBalances.map((o) => [o.ownerId, o.balanceOre]))).toEqual(new Map([[owes, 20000], [prepaid, 45000]]));
+		expect(await netOn(t.orgId, '1920')).toBe(100000);
+		expect(await netOn(t.orgId, '2400')).toBe(-500000);
+		expect(await netOn(t.orgId, '1500', owes)).toBe(0);
+		expect(await netOn(t.orgId, '2770', owes)).toBe(-20000);
+		expect(await netOn(t.orgId, '2770', prepaid)).toBe(-45000);
+		expect((await unbalanced(t.orgId)).length).toBe(0);
+	});
+
+	test('re-categorising reverses the voucher instead of deleting it', async () => {
+		const t = await testSameie();
+		const statementId = generateId();
+		await db.insert(s.bankStatement).values({ id: statementId, organizationId: t.orgId, fileName: 'test.csv', content: '', importedAt: new Date(), rowCount: 1 });
+		const txId = generateId();
+		await db.insert(s.bankTransaction).values({ id: txId, organizationId: t.orgId, bankStatementId: statementId, date: '2026-03-10', description: 'Faktura', amountOre: -5000 });
+		const categorise = (code: string) =>
+			db.transaction(async (tx) => {
+				await reverseBankAutoVoucher(tx, txId);
+				await createBankAutoVoucher(tx, { organizationId: t.orgId, bankTransactionId: txId, date: '2026-03-10', amountOre: -5000, counterAccountId: t.account(code), description: 'Faktura' });
+			});
+
+		await categorise('6340');
+		await categorise('6600');
+
+		const vouchers = await vouchersOf(t.orgId);
+		expect(vouchers.map((v) => [v.n, v.source, v.reverses])).toEqual([
+			[1, 'BANK_AUTO', null],
+			[2, 'CORRECTION', vouchers[0].id],
+			[3, 'BANK_AUTO', null]
+		]);
+		const [row] = await db.select({ voucherId: s.bankTransaction.voucherId }).from(s.bankTransaction).where(eq(s.bankTransaction.id, txId));
+		expect(row.voucherId).toBe(vouchers[2].id);
+		expect(await netOn(t.orgId, '6340')).toBe(0);
+		expect(await netOn(t.orgId, '6600')).toBe(5000);
+		expect(await netOn(t.orgId, '1920')).toBe(-5000);
+		expect((await unbalanced(t.orgId)).length).toBe(0);
 	});
 });
 
