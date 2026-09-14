@@ -3,10 +3,10 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
-import { expectedRentByOwner } from '$lib/server/rent';
+import { incomeStatement } from '$lib/server/balances';
 import { inYear } from '$lib/server/period';
-import { bankTransaction, ledgerAccount, organization, voucher, voucherLine } from '$lib/schema';
-import { eq, and, sql, inArray } from 'drizzle-orm';
+import { bankTransaction, organization } from '$lib/schema';
+import { eq, and } from 'drizzle-orm';
 import { createRequire } from 'module';
 const pdfmake = createRequire(import.meta.url)('pdfmake');
 
@@ -18,10 +18,6 @@ pdfmake.addFonts({
 		bolditalics: 'Helvetica-BoldOblique'
 	}
 });
-
-function ore(val: string | null): number {
-	return parseInt(val ?? '0');
-}
 
 // Thin line only below header row and above sum row
 function sectionLayout(bodyLength: number) {
@@ -42,38 +38,8 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
 
-	// Expected 3600 income from rent rates (accrual basis)
-	const { expected } = await expectedRentByOwner(orgId, year);
-	const expected3600 = [...expected.values()].reduce((s, v) => s + v, 0);
-
-	// Aggregate voucher lines per ledger account for the fiscal year.
-	// Net = credit - debit, so INCOME accounts show positive, EXPENSE accounts show negative.
-	const accountAgg = await db
-		.select({
-			code: ledgerAccount.code,
-			name: ledgerAccount.name,
-			type: ledgerAccount.type,
-			totalOre: sql<string>`COALESCE(SUM(${voucherLine.creditOre}) - SUM(${voucherLine.debitOre}), 0)`
-		})
-		.from(voucherLine)
-		.innerJoin(voucher, eq(voucher.id, voucherLine.voucherId))
-		.innerJoin(ledgerAccount, eq(ledgerAccount.id, voucherLine.ledgerAccountId))
-		.where(
-			and(
-				eq(voucher.organizationId, orgId),
-				eq(voucher.fiscalYear, year),
-				inArray(ledgerAccount.type, ['INCOME', 'EXPENSE'])
-			)
-		)
-		.groupBy(ledgerAccount.code, ledgerAccount.name, ledgerAccount.type)
-		.orderBy(ledgerAccount.code);
-
-	const inntekter = accountAgg
-		.filter((r) => r.type === 'INCOME')
-		.map((r) => ({ code: r.code, name: r.name, totalOre: r.totalOre }));
-	const utgifter = accountAgg
-		.filter((r) => r.type === 'EXPENSE')
-		.map((r) => ({ code: r.code, name: r.name, totalOre: r.totalOre }));
+	// Same figures the balance report uses for "Årets resultat"
+	const statement = await incomeStatement(orgId, year);
 
 	const ukategorisert = await db
 		.select({
@@ -91,16 +57,6 @@ export const GET: RequestHandler = async ({ params }) => {
 			)
 		)
 		.orderBy(bankTransaction.date);
-
-	// Replace actual 3600 with expected (accrual basis); keep other income accounts as actual
-	const inntekterAdjusted = [
-		...(expected3600 > 0 ? [{ code: '3600', name: 'Felleskostnader', totalOre: String(expected3600) }] : []),
-		...inntekter.filter((i) => i.code !== '3600')
-	];
-
-	const sumInntekter = inntekterAdjusted.reduce((s, r) => s + ore(r.totalOre), 0);
-	const sumUtgifter = utgifter.reduce((s, r) => s + ore(r.totalOre), 0);
-	const resultat = sumInntekter + sumUtgifter;
 
 	// A4: 595pt wide, margins 60pt each side → content width 475pt
 	// Columns: code 36pt | name * | amount 100pt
@@ -125,14 +81,15 @@ export const GET: RequestHandler = async ({ params }) => {
 
 	const inntekterBody = [
 		sectionHeader('INNTEKTER'),
-		...inntekterAdjusted.map((r) => dataRow(r.code, r.name, ore(r.totalOre))),
-		sumRow('Sum inntekter', sumInntekter)
+		...statement.income.map((r) => dataRow(r.code, r.name, r.amountOre)),
+		sumRow('Sum inntekter', statement.incomeOre)
 	];
 
+	// Expenses are printed as negative amounts
 	const utgifterBody = [
 		sectionHeader('UTGIFTER'),
-		...utgifter.map((r) => dataRow(r.code, r.name, ore(r.totalOre))),
-		sumRow('Sum utgifter', sumUtgifter)
+		...statement.expenses.map((r) => dataRow(r.code, r.name, -r.amountOre)),
+		sumRow('Sum utgifter', -statement.expensesOre)
 	];
 
 	const docDef = {
@@ -160,7 +117,7 @@ export const GET: RequestHandler = async ({ params }) => {
 			{
 				columns: [
 					{ text: 'Årsresultat', bold: true, fontSize: 12, width: '*' },
-					{ text: formatKr(resultat), bold: true, fontSize: 12, alignment: 'right', width: 120, noWrap: true }
+					{ text: formatKr(statement.resultOre), bold: true, fontSize: 12, alignment: 'right', width: 120, noWrap: true }
 				],
 				margin: [0, 0, 0, 4]
 			},

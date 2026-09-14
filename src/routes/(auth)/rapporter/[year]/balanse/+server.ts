@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
-import { closingBalances } from '$lib/server/balances';
+import { balanceSheet } from '$lib/server/balances';
 import { organization, voucher } from '$lib/schema';
 import { eq, and } from 'drizzle-orm';
 import { createRequire } from 'module';
@@ -44,21 +44,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		.limit(1);
 	if (!openingVoucher) throw error(400, `Ingen inngående saldo registrert for ${year}. Legg den inn på rapporter-siden.`);
 
-	// Same figures the next year's opening balance is carried forward from
-	const closing = await closingBalances(orgId, year);
-	const bankClosing = closing.bankOre;
-	const loanClosing = closing.loanOre;
-	let fordringClosing = 0;
-	let forhåndsClosing = 0;
-	for (const { balanceOre } of closing.ownerBalances) {
-		if (balanceOre < 0) fordringClosing -= balanceOre;
-		else forhåndsClosing += balanceOre;
-	}
-
-	// --- Egenkapital ---
-	const sumEiendeler = bankClosing + fordringClosing;
-	const sumGjeld = forhåndsClosing + loanClosing;
-	const egenkapital = sumEiendeler - sumGjeld;
+	const sheet = await balanceSheet(orgId, year);
 
 	// --- PDF ---
 	const COL = [36, '*', 100];
@@ -80,25 +66,19 @@ export const GET: RequestHandler = async ({ params }) => {
 		{ text: formatKr(oreVal), bold: true, alignment: 'right' }
 	];
 
-	const eiendelRows = [
-		dataRow('1920', 'Bankkonto', bankClosing),
-		...(fordringClosing !== 0 ? [dataRow('1500', 'Fordring på eiere', fordringClosing)] : [])
+	const lines = (rows: { code: string; name: string; amountOre: number }[]) => rows.map((r) => dataRow(r.code, r.name, r.amountOre));
+
+	const eiendelBody = [sectionHeader('EIENDELER'), ...lines(sheet.assets), sumRow('Sum eiendeler', sheet.assetsOre)];
+	const gjeldBody = [
+		sectionHeader('GJELD'),
+		...(sheet.liabilities.length > 0 ? lines(sheet.liabilities) : [dataRow('', 'Ingen gjeld', 0)]),
+		sumRow('Sum gjeld', sheet.liabilitiesOre)
 	];
-
-	const gjeldRows = [
-		...(forhåndsClosing !== 0 ? [dataRow('2770', 'Forhåndsbetalt fellesutgifter', forhåndsClosing)] : []),
-		...(loanClosing !== 0 ? [dataRow('2400', 'Langsiktig gjeld', loanClosing)] : [])
-	];
-
-	const eiendelBody = [sectionHeader('EIENDELER'), ...eiendelRows, sumRow('Sum eiendeler', sumEiendeler)];
-	const gjeldBody = gjeldRows.length > 0
-		? [sectionHeader('GJELD'), ...gjeldRows, sumRow('Sum gjeld', sumGjeld)]
-		: [sectionHeader('GJELD'), dataRow('', 'Ingen gjeld', 0), sumRow('Sum gjeld', 0)];
-
 	const egenkapitalBody = [
 		sectionHeader('EGENKAPITAL'),
-		dataRow('2050', 'Egenkapital', egenkapital),
-		sumRow('Sum gjeld og egenkapital', sumGjeld + egenkapital)
+		...lines(sheet.equity),
+		sumRow('Sum egenkapital', sheet.equityOre),
+		sumRow('Sum gjeld og egenkapital', sheet.liabilitiesOre + sheet.equityOre)
 	];
 
 	const docDef = {
@@ -122,9 +102,24 @@ export const GET: RequestHandler = async ({ params }) => {
 			},
 			{
 				table: { widths: COL, body: egenkapitalBody },
-				layout: sectionLayout(egenkapitalBody.length),
+				layout: sectionLayout(egenkapitalBody.length - 1),
 				margin: [0, 0, 0, 0]
-			}
+			},
+
+			// Shown instead of hidden: the report used to make equity whatever balanced it
+			...(sheet.differenceOre !== 0 ? [
+				{
+					columns: [
+						{ text: 'Differanse', bold: true, width: '*' },
+						{ text: formatKr(sheet.differenceOre), bold: true, alignment: 'right', width: 120, noWrap: true }
+					],
+					margin: [0, 20, 0, 4]
+				},
+				{
+					text: 'Eiendeler minus gjeld og egenkapital. Skyldes vanligvis banktransaksjoner som ikke er kategorisert (se resultatregnskapet); kategoriser dem for å få differansen til null.',
+					fontSize: 8
+				}
+			] : [])
 		]
 	};
 
