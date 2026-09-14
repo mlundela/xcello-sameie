@@ -17,7 +17,7 @@ bun run build && bun run preview
 
 bun run db:generate              # drizzle-kit generate — new migration from src/lib/schema.ts
 bun run db:studio
-bun run db:seed                  # src/lib/server/seed.ts — demo users/orgs only, needs DATABASE_URL in env
+bun run db:seed                  # empty DB → migrations + demo data: "Sameiet Solsiden" (2 years, 5 flats, sale, rules, bank tx) and "Sameiet Nabolaget"
 ```
 
 There is **no test framework**. "Verification before done" means `bun run check` plus exercising the flow against the local DB (`psql`, `db:studio`, or the dev server). Don't claim tests pass; don't add a test runner unless asked.

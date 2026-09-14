@@ -14,7 +14,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "bun src/lib/server/seed.ts"
+    "db:seed": "bun --preload ./scripts/kit-shim.ts src/lib/server/seed.ts"
   },
   "dependencies": {
     "@sveltejs/kit": "^2.70.3",

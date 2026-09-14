@@ -13,7 +13,7 @@ cp .env.example .env        # fill in secrets; see below
 docker compose up -d db
 bun install
 bun run dev                 # http://localhost:5173, applies pending migrations on start
-bun run db:seed             # optional: demo users admin@example.com / user@example.com, password "password123"
+bun run db:seed             # optional, on an empty database: two demo sameier with a year and a half of data
 ```
 
 `bun run check` (svelte-check) is the automated verification and runs in CI on every pull request.
