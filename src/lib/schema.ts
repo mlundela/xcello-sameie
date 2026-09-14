@@ -8,7 +8,9 @@ export const user = pgTable('user', {
 	emailVerified: boolean('email_verified').notNull(),
 	image: text('image'),
 	createdAt: timestamp('created_at').notNull(),
-	updatedAt: timestamp('updated_at').notNull()
+	updatedAt: timestamp('updated_at').notNull(),
+	// Where the next sign-in lands ($lib/server/membership.ts)
+	lastActiveOrganizationId: text('last_active_organization_id').references(() => organization.id, { onDelete: 'set null' })
 });
 
 export const session = pgTable('session', {

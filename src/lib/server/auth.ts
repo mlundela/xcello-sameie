@@ -3,7 +3,8 @@ import {drizzleAdapter} from 'better-auth/adapters/drizzle';
 import {organization} from 'better-auth/plugins';
 import {db} from './db';
 import * as schema from '$lib/schema';
-import {flat, flatOwnership, ledgerAccount, matchingRule, member, owner} from '$lib/schema';
+import {flat, flatOwnership, ledgerAccount, matchingRule, owner} from '$lib/schema';
+import {landingMembership} from './membership';
 import {env} from '$env/dynamic/private';
 import {sendInviteEmail, sendPasswordResetEmail, sendVerificationEmail} from './email';
 import {eq} from "drizzle-orm";
@@ -96,24 +97,16 @@ export const auth = betterAuth({
     databaseHooks: {
         session: {
             create: {
-                before: async (session) => {
-
-                    let memberships = await db
-                        .select({org: schema.organization, role: member.role})
-                        .from(member)
-                        .innerJoin(schema.organization, eq(member.organizationId, schema.organization.id))
-                        .where(eq(member.userId, session.userId));
-
-                    let activeOrganizationId = memberships && memberships.map(m => m.org.id)[0]
-
-                    console.log('Set active orgId:', activeOrganizationId);
-
-                    return {
-                        data: {
-                            ...session,
-                            activeOrganizationId,
-                        },
-                    };
+                before: async (session) => ({
+                    data: {...session, activeOrganizationId: (await landingMembership(session.userId))?.organizationId ?? null}
+                }),
+            },
+            update: {
+                // setActiveOrganization updates the session; remember the choice for the next sign-in
+                after: async (session) => {
+                    const organizationId = session.activeOrganizationId as string | null | undefined;
+                    if (!organizationId) return;
+                    await db.update(schema.user).set({lastActiveOrganizationId: organizationId}).where(eq(schema.user.id, session.userId));
                 },
             },
         },
@@ -182,10 +175,6 @@ export const auth = betterAuth({
                         // Two owners with the same name share one rule (patterns are unique per sameie)
                         ).onConflictDoNothing();
                     });
-                },
-                // After a member is removed
-                afterRemoveMember: async ({member, user, organization}) => {
-                    console.log(`A member ${user.id} left an organization ${organization.id}`);
                 },
             },
             sendInvitationEmail: async (data) => {

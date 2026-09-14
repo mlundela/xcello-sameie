@@ -5,6 +5,7 @@ import { auth } from './auth';
 import { db } from './db';
 import { flat, ledgerAccount, member, owner } from '$lib/schema';
 import { canEdit } from '$lib/roles';
+import { landingMembership } from './membership';
 
 type Session = NonNullable<App.Locals['session']>;
 
@@ -25,7 +26,7 @@ export async function ensureActiveMembership(session: Session, headers: Headers)
 	const active = memberships.find((m) => m.organizationId === activeOrgId);
 	if (active) return active.role;
 
-	const next = memberships[0] ?? null;
+	const next = await landingMembership(session.user.id);
 	await auth.api.setActiveOrganization({ body: { organizationId: next?.organizationId ?? null }, headers });
 	session.session.activeOrganizationId = next?.organizationId ?? null;
 	return next?.role ?? null;

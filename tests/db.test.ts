@@ -10,8 +10,10 @@ import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
 import { createBankAutoVouchers, createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
 import { expectedRentByOwner, setRentFrom } from '$lib/server/rent';
 import { ownerLedger } from '$lib/server/balances';
+import { landingMembership } from '$lib/server/membership';
 
 const createdOrgs: string[] = [];
+const createdUsers: string[] = [];
 
 async function testSameie() {
 	const orgId = generateId();
@@ -42,6 +44,7 @@ async function testSameie() {
 }
 
 afterAll(async () => {
+	if (createdUsers.length > 0) await db.delete(s.user).where(inArray(s.user.id, createdUsers));
 	if (createdOrgs.length > 0) {
 		// Dependency order: an organization delete alone trips voucher_line -> ledger_account
 		// (and flat_ownership -> owner), whose foreign keys have no ON DELETE action
@@ -152,5 +155,26 @@ describe('rent', () => {
 			{ fromYear: 2025, fromMonth: 1, toYear: 2026, toMonth: 5, amount: 100000 },
 			{ fromYear: 2026, fromMonth: 6, toYear: null, toMonth: null, amount: 130000 }
 		]);
+	});
+});
+
+describe('landingMembership', () => {
+	test('the sameie chosen last while still a member, otherwise the oldest membership', async () => {
+		const [older, newer, other] = [await testSameie(), await testSameie(), await testSameie()];
+		const userId = generateId();
+		createdUsers.push(userId);
+		await db.insert(s.user).values({ id: userId, name: 'Test', email: `${userId}@test.invalid`, emailVerified: true, createdAt: new Date(), updatedAt: new Date() });
+		const join = (orgId: string, joined: string) => db.insert(s.member).values({ id: generateId(), userId, organizationId: orgId, role: 'member', createdAt: new Date(joined) });
+		// Joined in the opposite order of creation, so row order can't pass the test by accident
+		await join(newer.orgId, '2025-06-01');
+		await join(older.orgId, '2024-01-01');
+		const landing = async () => (await landingMembership(userId))?.organizationId;
+		const chooseLast = (orgId: string) => db.update(s.user).set({ lastActiveOrganizationId: orgId }).where(eq(s.user.id, userId));
+
+		expect(await landing()).toBe(older.orgId);
+		await chooseLast(newer.orgId);
+		expect(await landing()).toBe(newer.orgId);
+		await chooseLast(other.orgId); // no longer (or never) a member there
+		expect(await landing()).toBe(older.orgId);
 	});
 });
