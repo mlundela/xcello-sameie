@@ -16,9 +16,10 @@ export const get_dashboard_data = query(
 			.from(accountingPeriod)
 			.where(eq(accountingPeriod.organizationId, orgId))
 			.orderBy(asc(accountingPeriod.year));
-		// Default: the oldest open period, the one still being worked on (as on /transaksjoner)
+		// Default: the current calendar year, else the latest period (as on /transaksjoner). Not the oldest
+		// open one: years are never closed (period locking is deferred), so that kept every sameie in its first year.
 		const period =
-			periods.find((p) => p.year === year) ?? periods.find((p) => p.status === 'OPEN') ?? periods.at(-1) ?? null;
+			periods.find((p) => p.year === year) ?? periods.find((p) => p.year === new Date().getFullYear()) ?? periods.at(-1) ?? null;
 		if (!period) return { periods, period: null, rows: [] };
 
 		await syncOpeningBalances(orgId);
