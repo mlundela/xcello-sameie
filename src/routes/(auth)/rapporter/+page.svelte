@@ -34,7 +34,10 @@
 			</div>
 		{/if}
 		{#if list.length === 0}
-			<p class="text-base-content/50">Ingen regnskapsperioder registrert ennå.</p>
+			<p class="text-base-content/50">
+				Ingen regnskapsperioder registrert ennå.
+				{#if page.data.canEdit}<a href="/organizations/new" class="link">Fullfør oppsettet</a> med første regnskapsår og inngående saldo.{/if}
+			</p>
 		{:else}
 			<div class="flex flex-col gap-8">
 				{#each list as year}

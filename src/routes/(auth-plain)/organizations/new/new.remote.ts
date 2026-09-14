@@ -1,14 +1,27 @@
+import { error } from '@sveltejs/kit';
 import { command, query, getRequestEvent } from '$app/server';
 import * as v from 'valibot';
 import { ADDRESS_ID_PATTERN, auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId, requireSession } from '$lib/server/tenant';
-import { flat, accountingPeriod, flatOwnership, owner } from '$lib/schema';
+import { flat, accountingPeriod, flatOwnership, organization, owner } from '$lib/schema';
 import { setRentFrom } from '$lib/server/rent';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createOpeningVoucher } from '$lib/server/voucher';
 import { syncOpeningBalances } from '$lib/server/balances';
+import { canEdit } from '$lib/roles';
+
+/** A sameie whose setup stopped after step 1 has no accounting year yet; the wizard resumes at step 2 for it. */
+export const get_setup_state = query(async () => {
+	const session = requireSession();
+	const orgId = session.session.activeOrganizationId;
+	if (!orgId || !canEdit(getRequestEvent().locals.role)) return { resume: false as const };
+	const [period] = await db.select({ id: accountingPeriod.id }).from(accountingPeriod).where(eq(accountingPeriod.organizationId, orgId)).limit(1);
+	if (period) return { resume: false as const };
+	const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
+	return { resume: true as const, organizationName: org?.name ?? '' };
+});
 
 export const get_setup_flats = query(async () => {
 	const orgId = requireOrgId();
@@ -53,6 +66,9 @@ export const setup_accounting_periods = command(
 	async ({ startYear, bankOre, loanOre, ownerBalances }) => {
 		const orgId = requireAdmin();
 		await assertInOrg(owner, ownerBalances.map((o) => o.ownerId), orgId);
+		// Only for a sameie without accounting years: later years are started and edited under Rapporter
+		const [existing] = await db.select({ id: accountingPeriod.id }).from(accountingPeriod).where(eq(accountingPeriod.organizationId, orgId)).limit(1);
+		if (existing) error(409, 'Sameiet har allerede regnskapsår. Inngående saldo endres under Rapporter.');
 		const currentYear = new Date().getFullYear();
 		const rows = Array.from({ length: currentYear - startYear + 1 }, (_, i) => ({
 			id: generateId(),

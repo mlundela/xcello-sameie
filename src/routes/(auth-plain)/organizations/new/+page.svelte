@@ -2,7 +2,8 @@
 	import { krToOre } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
-	import { create_organization, get_setup_flats, get_setup_owners, setup_accounting_periods, set_initial_rent } from './new.remote';
+	import { onMount } from 'svelte';
+	import { create_organization, get_setup_flats, get_setup_owners, get_setup_state, setup_accounting_periods, set_initial_rent } from './new.remote';
 
 	type GeoAddress = {
 		kommunenummer: string;
@@ -43,6 +44,16 @@
 	let flats = $state<Flat[]>([]);
 	let amounts = $state<Record<string, string>>({});
 	let autoFill = $state(true);
+
+	// A sameie whose setup stopped after step 1 continues at step 2 instead of getting a second sameie
+	let resumedName = $state('');
+	onMount(async () => {
+		const setup = await get_setup_state();
+		if (!setup.resume) return;
+		[flats, owners] = await Promise.all([get_setup_flats(), get_setup_owners()]);
+		resumedName = setup.organizationName;
+		step = 2;
+	});
 
 	function fillFromShare(changedFlatId: string) {
 		if (!autoFill) return;
@@ -355,6 +366,12 @@
 
 				{:else if step === 2}
 					<h1 class="card-title text-xl mb-2">Regnskapsår</h1>
+					{#if resumedName}
+						<p class="text-sm mb-2">
+							Fortsetter oppsettet av <span class="font-medium">{resumedName}</span>.
+							<button type="button" class="link" onclick={() => { resumedName = ''; step = 1; }}>Opprett et annet sameie</button>
+						</p>
+					{/if}
 					<p class="text-sm text-base-content/60 mb-4">
 						Velg første regnskapsår og legg inn inngående saldo per 1. januar det året.
 					</p>

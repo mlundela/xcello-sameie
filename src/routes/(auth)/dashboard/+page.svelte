@@ -28,7 +28,10 @@
 				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-info h-6 w-6 shrink-0">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
 				</svg>
-				<span>Ingen åpen regnskapsperiode. Start et regnskapsår under <a href="/rapporter" class="link">Rapporter</a> for å se betalingsstatus.</span>
+				<span>
+					Sameiet har ikke noe regnskapsår ennå.
+					{#if page.data.canEdit}<a href="/organizations/new" class="link">Fullfør oppsettet</a> med første regnskapsår og inngående saldo.{:else}Be en administrator fullføre oppsettet.{/if}
+				</span>
 			</div>
 		{:else}
 			<div class="flex flex-col gap-1">
