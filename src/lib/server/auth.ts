@@ -168,7 +168,8 @@ export const auth = betterAuth({
                                 pattern: o.name,
                                 ownerId: o.id
                             }))
-                        );
+                        // Two owners with the same name share one rule (patterns are unique per sameie)
+                        ).onConflictDoNothing();
                     });
                 },
                 // After a member is removed

@@ -16,6 +16,7 @@ import { eq, and, sql, inArray, ilike, gt, gte, lt, lte, asc, desc } from 'drizz
 import { generateId } from 'better-auth';
 import { createBankAutoVoucher, createBankAutoVouchers, deleteBankAutoVoucher } from '$lib/server/voucher';
 import { inYear } from '$lib/server/period';
+import { findRule, upsertRule } from '$lib/server/matching';
 
 type ParsedRow = { date: string; description: string; amountOre: number };
 
@@ -326,9 +327,8 @@ export const import_csv = command(
 			let receiptNotRequired = row.amountOre > 0;
 			let userDescription: string | null = null;
 
-			const match = rules.find((r) =>
-				row.description.toLowerCase().includes(r.pattern.toLowerCase())
-			);
+			// Longest applicable pattern wins; account rules only apply to outgoing payments
+			const match = findRule(rules, row.description, row.amountOre);
 
 			if (match) {
 				if (match.ownerId) {
@@ -336,7 +336,7 @@ export const import_csv = command(
 					matchedOwnerId = match.ownerId;
 					ledgerAccountId = account3600Id;
 					status = 'MATCHED';
-				} else if (row.amountOre < 0 && match.ledgerAccountId) {
+				} else if (match.ledgerAccountId) {
 					ledgerAccountId = match.ledgerAccountId;
 					status = 'CATEGORIZED';
 				}
@@ -410,6 +410,27 @@ function containsPattern(pattern: string): string {
 	return `%${pattern.replace(/[\\%_]/g, (c) => '\\' + c)}%`;
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The org's unmatched transactions that a just-saved rule would win at import (see findRule),
+ * so creating a rule now and importing later give the same result: a shorter new rule doesn't
+ * take transactions a longer existing rule applies to.
+ */
+async function unmatchedWonBy(tx: Tx, orgId: string, pattern: string) {
+	const [rules, candidates] = await Promise.all([
+		tx
+			.select({ pattern: matchingRule.pattern, ownerId: matchingRule.ownerId, ledgerAccountId: matchingRule.ledgerAccountId, receiptNotRequired: matchingRule.receiptNotRequired, userDescription: matchingRule.userDescription })
+			.from(matchingRule)
+			.where(eq(matchingRule.organizationId, orgId)),
+		tx
+			.select({ id: bankTransaction.id, date: bankTransaction.date, amountOre: bankTransaction.amountOre, description: bankTransaction.description, userDescription: bankTransaction.userDescription })
+			.from(bankTransaction)
+			.where(and(eq(bankTransaction.organizationId, orgId), eq(bankTransaction.status, 'UNMATCHED'), ilike(bankTransaction.description, containsPattern(pattern))))
+	]);
+	return candidates.filter((c) => findRule(rules, c.description, c.amountOre)?.pattern.toLowerCase() === pattern.toLowerCase());
+}
+
 async function get3600AccountId(orgId: string): Promise<string | null> {
 	const [account] = await db
 		.select({ id: ledgerAccount.id })
@@ -471,10 +492,10 @@ export const create_rule_and_apply = command(
 		const ledgerAccountId = await get3600AccountId(orgId);
 		if (!ledgerAccountId) error(409, 'Mangler konto 3600 i kontoplanen');
 		const matched = await db.transaction(async (tx) => {
+			await upsertRule(tx, orgId, { pattern, ownerId, ledgerAccountId: null, receiptNotRequired, userDescription: userDescription ?? null });
+			const rows = await unmatchedWonBy(tx, orgId, pattern);
+			if (rows.length === 0) return 0;
 			await tx
-				.insert(matchingRule)
-				.values({ id: generateId(), organizationId: orgId, pattern, ownerId, receiptNotRequired, userDescription });
-			const updated = await tx
 				.update(bankTransaction)
 				.set({
 					matchedOwnerId: ownerId,
@@ -483,34 +504,20 @@ export const create_rule_and_apply = command(
 					...(receiptNotRequired ? { receiptNotRequired: true } : {}),
 					...(userDescription ? { userDescription } : {})
 				})
-				.where(
-					and(
-						eq(bankTransaction.organizationId, orgId),
-						eq(bankTransaction.status, 'UNMATCHED'),
-						// Like import_csv: owner rules cover payments and refunds alike
-						ilike(bankTransaction.description, containsPattern(pattern))
-					)
-				)
-				.returning({
-					id: bankTransaction.id,
-					date: bankTransaction.date,
-					amountOre: bankTransaction.amountOre,
-					description: bankTransaction.description,
-					userDescription: bankTransaction.userDescription
-				});
+				.where(inArray(bankTransaction.id, rows.map((r) => r.id)));
 			await createBankAutoVouchers(
 				tx,
 				orgId,
-				updated.map((row) => ({
+				rows.map((row) => ({
 					bankTransactionId: row.id,
 					date: row.date,
 					amountOre: row.amountOre,
 					counterAccountId: ledgerAccountId,
 					ownerId,
-					description: row.userDescription ?? row.description
+					description: userDescription || row.userDescription || row.description
 				}))
 			);
-			return updated.length;
+			return rows.length;
 		});
 		return { matched };
 	}
@@ -527,10 +534,11 @@ export const create_expense_rule_and_apply = command(
 		const orgId = requireAdmin();
 		await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
 		const categorized = await db.transaction(async (tx) => {
+			await upsertRule(tx, orgId, { pattern, ownerId: null, ledgerAccountId, receiptNotRequired, userDescription: userDescription ?? null });
+			// findRule only lets account rules win outgoing payments
+			const rows = await unmatchedWonBy(tx, orgId, pattern);
+			if (rows.length === 0) return 0;
 			await tx
-				.insert(matchingRule)
-				.values({ id: generateId(), organizationId: orgId, pattern, ledgerAccountId, receiptNotRequired, userDescription });
-			const updated = await tx
 				.update(bankTransaction)
 				.set({
 					ledgerAccountId,
@@ -538,33 +546,19 @@ export const create_expense_rule_and_apply = command(
 					...(receiptNotRequired ? { receiptNotRequired: true } : {}),
 					...(userDescription ? { userDescription } : {})
 				})
-				.where(
-					and(
-						eq(bankTransaction.organizationId, orgId),
-						eq(bankTransaction.status, 'UNMATCHED'),
-						sql`${bankTransaction.amountOre} < 0`,
-						ilike(bankTransaction.description, containsPattern(pattern))
-					)
-				)
-				.returning({
-					id: bankTransaction.id,
-					date: bankTransaction.date,
-					amountOre: bankTransaction.amountOre,
-					description: bankTransaction.description,
-					userDescription: bankTransaction.userDescription
-				});
+				.where(inArray(bankTransaction.id, rows.map((r) => r.id)));
 			await createBankAutoVouchers(
 				tx,
 				orgId,
-				updated.map((row) => ({
+				rows.map((row) => ({
 					bankTransactionId: row.id,
 					date: row.date,
 					amountOre: row.amountOre,
 					counterAccountId: ledgerAccountId,
-					description: row.userDescription ?? row.description
+					description: userDescription || row.userDescription || row.description
 				}))
 			);
-			return updated.length;
+			return rows.length;
 		});
 		return { categorized };
 	}

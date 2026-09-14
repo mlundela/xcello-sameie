@@ -55,6 +55,7 @@
 				<p class="text-sm text-base-content/60">
 					Når en importert banktransaksjon inneholder mønsteret, kobles den til eieren eller kategoriseres
 					på kontoen. Eierregler gjelder både innbetalinger og tilbakebetalinger, kontoregler bare utbetalinger.
+					Passer flere regler, brukes den med lengst mønster.
 				</p>
 				{#if rules.length === 0}
 					<p class="text-sm text-base-content/40 py-4 text-center">Ingen regler er definert ennå.</p>

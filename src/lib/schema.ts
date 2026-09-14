@@ -159,7 +159,11 @@ export const matchingRule = pgTable('matching_rule', {
 		.references(() => ledgerAccount.id, { onDelete: 'cascade' }),
 	receiptNotRequired: boolean('receipt_not_required').notNull().default(false),
 	userDescription: text('user_description')
-}, (t) => [index('mr_org_idx').on(t.organizationId)]);
+}, (t) => [
+	index('mr_org_idx').on(t.organizationId),
+	// One rule per pattern, ignoring case; see upsertRule in $lib/server/matching.ts
+	uniqueIndex('mr_org_pattern_idx').on(t.organizationId, sql`lower(${t.pattern})`)
+]);
 
 export const bankStatement = pgTable('bank_statement', {
 	id: text('id').primaryKey(),

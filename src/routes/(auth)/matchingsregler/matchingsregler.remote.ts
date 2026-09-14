@@ -5,7 +5,7 @@ import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { matchingRule, owner, flat, flatOwnership, ledgerAccount } from '$lib/schema';
 import { eq, isNull, and } from 'drizzle-orm';
-import { generateId } from 'better-auth';
+import { upsertRule } from '$lib/server/matching';
 
 export const get_rules = query(async () => {
 	const orgId = requireOrgId();
@@ -53,14 +53,13 @@ export const create_rule = command(
 		if (!ownerId === !ledgerAccountId) error(400, 'Velg enten en eier eller en konto');
 		if (ownerId) await assertInOrg(owner, [ownerId], orgId);
 		if (ledgerAccountId) await assertInOrg(ledgerAccount, [ledgerAccountId], orgId);
-		await db.insert(matchingRule).values({
-			id: generateId(),
-			organizationId: orgId,
+		// Same pattern as an existing rule updates that rule instead of adding a duplicate
+		await upsertRule(db, orgId, {
 			pattern,
-			ownerId,
-			ledgerAccountId,
+			ownerId: ownerId ?? null,
+			ledgerAccountId: ledgerAccountId ?? null,
 			receiptNotRequired,
-			userDescription: userDescription || null
+			userDescription: userDescription ?? null
 		});
 		await get_rules().refresh();
 	}

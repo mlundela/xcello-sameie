@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "mr_org_pattern_idx" ON "matching_rule" USING btree ("organization_id",lower("pattern"));

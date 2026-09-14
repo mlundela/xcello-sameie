@@ -134,7 +134,8 @@ export const record_ownership_change = command(
 						publicId: o.publicId || `manuell-${ownerId}`
 					});
 					// Same name-based matching rule onboarding creates for Matrikkel owners
-					await tx.insert(matchingRule).values({ id: generateId(), organizationId: orgId, pattern: o.name, ownerId });
+					// Skipped if a rule with that name already exists (patterns are unique per sameie)
+				await tx.insert(matchingRule).values({ id: generateId(), organizationId: orgId, pattern: o.name, ownerId }).onConflictDoNothing();
 				}
 				await tx.insert(flatOwnership).values({
 					id: generateId(),
