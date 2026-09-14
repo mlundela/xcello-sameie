@@ -14,6 +14,7 @@ docker compose up --build        # app (Docker image, :3000) + db, reading .env
 
 bun run check                    # svelte-kit sync + svelte-check
 bun run test                     # bun test over tests/ (needs the db container running)
+bun run test:e2e                 # tests/tenant.e2e.ts against a running `bun run dev`: tenant isolation, member roles
 bun run build && bun run preview
 
 bun run db:generate              # drizzle-kit generate — new migration from src/lib/schema.ts
@@ -21,7 +22,7 @@ bun run db:studio
 bun run db:seed                  # empty DB → migrations + demo data: "Sameiet Solsiden" (2 years, 5 flats, sale, rules, bank tx) and "Sameiet Nabolaget"
 ```
 
-`bun run test` runs `bun test` over `tests/` through `scripts/kit-shim.ts`: `unit.test.ts` (money, rule precedence, rent months, redirects, roles), `csv.test.ts` (the bank parsers, against made-up files in each bank's layout) and `db.test.ts` (vouchers, opening balances, rent and owner ledgers against Postgres at `DATABASE_URL`; each test creates and deletes its own sameie). CI runs `check` and `test` with a Postgres service. svelte-check type-checks `tests/` too (`@types/bun` provides `bun:test`). "Verification before done" still means `bun run check`, `bun run test`, and exercising the flow against the local DB (`psql`, `db:studio`, or the dev server) for anything the tests don't cover; add a test when you fix logic in `$lib/server`.
+`bun run test` runs `bun test` over `tests/` through `scripts/kit-shim.ts`: `unit.test.ts` (money, rule precedence, rent months, redirects, roles), `csv.test.ts` (the bank parsers, against made-up files in each bank's layout), `guards.test.ts` (reads the source: every command and form calls `requireAdmin()` unless listed in `MEMBER_COMMANDS`, every remote function and `(auth)` endpoint checks the session or sameie) and `db.test.ts` (vouchers, opening balances, rent and owner ledgers against Postgres at `DATABASE_URL`; each test creates and deletes its own sameie). CI runs `check` and `test` with a Postgres service. svelte-check type-checks `tests/` too (`@types/bun` provides `bun:test`). "Verification before done" still means `bun run check`, `bun run test`, and exercising the flow against the local DB (`psql`, `db:studio`, or the dev server) for anything the tests don't cover; add a test when you fix logic in `$lib/server`.
 
 `.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `ORIGIN`, `GOOGLE_CLIENT_ID/SECRET`, `RESEND_API_KEY`, `EMAIL_FROM`, `MATRIKKEL_API_URL`. `EMAIL_FROM` must be on a domain verified in Resend; `onboarding@resend.dev` only delivers to the Resend account owner, which is fine for local dev only. Note `MATRIKKEL_API_URL` points at a **separate external service not in compose.yml**; when it's unset or unreachable, org creation logs the failure and continues with the chart of accounts but no flats or owners.
 

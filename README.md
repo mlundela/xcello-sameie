@@ -16,7 +16,7 @@ bun run dev                 # http://localhost:5173, applies pending migrations 
 bun run db:seed             # optional, on an empty database: two demo sameier with a year and a half of data
 ```
 
-`bun run check` (svelte-check), `bun run test` (unit, CSV parser and database tests; needs the db container) and `bun run build` run in CI on every push to main and every pull request, with the bun version from `packageManager` in `package.json` (the Docker image uses the same one).
+`bun run check` (svelte-check), `bun run test` (unit, CSV parser and database tests; needs the db container) and `bun run build` run in CI on every push to main and every pull request, with the bun version from `packageManager` in `package.json` (the Docker image uses the same one). CI then starts the dev server and runs `bun run test:e2e`, which checks tenant isolation and member roles over HTTP; locally, run it while `bun run dev` is up.
 
 ### Environment
 

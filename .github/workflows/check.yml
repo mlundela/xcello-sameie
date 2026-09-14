@@ -42,5 +42,22 @@ jobs:
 
       - run: bun run test
 
+      # Tenant isolation and member roles against the running app (tests/tenant.e2e.ts). The
+      # secrets are placeholders: the tests create users in the database and send no email.
+      - name: Start the dev server
+        run: bun run dev > dev.log 2>&1 &
+        env:
+          ORIGIN: http://localhost:5173
+          BETTER_AUTH_SECRET: ci-placeholder-secret-0123456789abcdef
+          GOOGLE_CLIENT_ID: ci-placeholder
+          GOOGLE_CLIENT_SECRET: ci-placeholder
+          RESEND_API_KEY: re_ci_placeholder
+          EMAIL_FROM: CI <ci@example.com>
+
+      - name: Wait for the dev server
+        run: for i in $(seq 1 90); do curl -sf -o /dev/null http://localhost:5173/login && exit 0; sleep 2; done; cat dev.log; exit 1
+
+      - run: bun run test:e2e
+
       # The production build the Docker image runs; needs no env (see `building` in $lib/server)
       - run: bun run build
