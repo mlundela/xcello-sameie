@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "db:seed": "bun --preload ./scripts/kit-shim.ts src/lib/server/seed.ts"
+    "db:seed": "bun --preload ./scripts/kit-shim.ts src/lib/server/seed.ts",
+    "test": "bun test --preload ./scripts/kit-shim.ts tests"
   },
   "dependencies": {
     "@sveltejs/kit": "^2.70.3",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@sveltejs/adapter-node": "^5.5.7",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/bun": "^1.4.2",
     "@types/node": "^25.9.6",
     "@types/pdfmake": "^0.3.3",
     "drizzle-kit": "^0.31.10",

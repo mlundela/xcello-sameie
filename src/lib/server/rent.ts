@@ -43,7 +43,7 @@ export async function setRentFrom(tx: Tx, flatId: string, fromYear: number, from
 
 type Rent = Pick<typeof flatRent.$inferSelect, 'flatId' | 'fromYear' | 'fromMonth' | 'toYear' | 'toMonth' | 'amount'>;
 
-function rentForMonth(rents: Rent[], flatId: string, year: number, month: number): number {
+export function rentForMonth(rents: Rent[], flatId: string, year: number, month: number): number {
 	const rent = rents.find((r) => {
 		if (r.flatId !== flatId) return false;
 		const fromOk = r.fromYear < year || (r.fromYear === year && r.fromMonth <= month);
@@ -57,7 +57,7 @@ function rentForMonth(rents: Rent[], flatId: string, year: number, month: number
 }
 
 /** Months of `year` that have fallen due: all 12 for past years, none for future ones. */
-function monthsDue(year: number, today: Date): number {
+export function monthsDue(year: number, today: Date): number {
 	if (year < today.getFullYear()) return 12;
 	if (year > today.getFullYear()) return 0;
 	return today.getMonth() + 1;
