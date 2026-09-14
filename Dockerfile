@@ -22,8 +22,8 @@ FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3000 \
-    # Receipts are up to 10 MB, sent base64-encoded (~13.4 MB)
-    BODY_SIZE_LIMIT=15M
+    # Receipts are up to 10 MB; the upload form sends the raw bytes
+    BODY_SIZE_LIMIT=11M
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/build ./build
 # The migrations themselves: the .sql files plus meta/_journal.json. The

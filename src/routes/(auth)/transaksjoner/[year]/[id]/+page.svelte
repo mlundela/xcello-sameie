@@ -2,7 +2,6 @@
 	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
-	import { readAsBase64 } from '$lib/file';
 	import KategoriSelect from '../KategoriSelect.svelte';
 	import {
 		get_transaction,
@@ -27,36 +26,32 @@
 	const accountsData = get_accounts();
 
 	let fileInput = $state<HTMLInputElement>();
-	let uploading = $state(false);
 	let uploadError = $state('');
 	let userDesc = $state('');
 	let editingDesc = $state(false);
 
-	async function handleFileChange(e: Event) {
-		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
+	// Picking a file submits the form. The size check here only saves uploading a file the server refuses.
+	function handleFileChange(e: Event & { currentTarget: HTMLInputElement }) {
+		const file = e.currentTarget.files?.[0];
 		if (!file) return;
 		if (file.size > 10 * 1024 * 1024) {
 			uploadError = 'Filen er for stor (maks 10 MB)';
+			e.currentTarget.value = '';
 			return;
 		}
-		uploading = true;
+		e.currentTarget.form?.requestSubmit();
+	}
+
+	const upload = upload_attachment.enhance(async ({ element, fields, submit }) => {
 		uploadError = '';
 		try {
-			const content = await readAsBase64(file);
-			await upload_attachment({
-				transactionId: id,
-				fileName: file.name,
-				mimeType: file.type as 'application/pdf' | 'image/jpeg' | 'image/png' | 'image/webp',
-				content
-			}).updates(attachmentsQuery);
+			if (!(await submit().updates(attachmentsQuery))) uploadError = fields.file.issues()?.[0]?.message ?? 'Opplasting feilet';
 		} catch (err: unknown) {
 			uploadError = errorMessage(err, 'Opplasting feilet');
 		} finally {
-			uploading = false;
-			input.value = '';
+			element.reset();
 		}
-	}
+	});
 </script>
 
 {#await Promise.all([txQuery, rulesData, accountsData])}
@@ -184,18 +179,22 @@
 			<div class="card-body gap-4">
 				<div class="flex items-center justify-between">
 					<h2 class="card-title text-base">Vedlegg</h2>
-					<button class="btn btn-sm btn-primary" disabled={uploading || tx.receiptNotRequired} onclick={() => fileInput!.click()}>
-						{#if uploading}<span class="loading loading-spinner loading-xs"></span>{/if}
-						Last opp
-					</button>
-					<input
-						bind:this={fileInput}
-						type="file"
-						accept=".pdf,.jpg,.jpeg,.png,.webp"
-						class="hidden"
-						aria-label="Velg vedlegg"
-						onchange={handleFileChange}
-					/>
+					<form {...upload} enctype="multipart/form-data">
+						<input type="hidden" name="transactionId" value={id} />
+						<button type="button" class="btn btn-sm btn-primary" disabled={upload_attachment.pending > 0 || tx.receiptNotRequired} onclick={() => fileInput!.click()}>
+							{#if upload_attachment.pending > 0}<span class="loading loading-spinner loading-xs"></span>{/if}
+							Last opp
+						</button>
+						<input
+							bind:this={fileInput}
+							type="file"
+							name="file"
+							accept=".pdf,.jpg,.jpeg,.png,.webp"
+							class="hidden"
+							aria-label="Velg vedlegg"
+							onchange={handleFileChange}
+						/>
+					</form>
 				</div>
 
 				{#if uploadError}

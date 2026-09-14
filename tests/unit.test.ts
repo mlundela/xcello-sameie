@@ -5,6 +5,7 @@ import { findRule, type Rule } from '$lib/server/matching';
 import { monthsDue, rentForMonth } from '$lib/server/rent';
 import { safeNext } from '$lib/next';
 import { canEdit } from '$lib/roles';
+import { receiptType } from '$lib/server/receipt';
 
 const plain = (s: string) => s.replaceAll('\u00a0', ' ');
 
@@ -116,6 +117,23 @@ describe('safeNext', () => {
 		expect(safeNext('/\\evil.example')).toBe('/dashboard');
 		expect(safeNext('https://evil.example')).toBe('/dashboard');
 		expect(safeNext(null)).toBe('/dashboard');
+	});
+});
+
+describe('receiptType', () => {
+	const bytes = (...parts: (string | number[])[]) => new Uint8Array(parts.flatMap((p) => (typeof p === 'string' ? [...p].map((c) => c.charCodeAt(0)) : p)));
+
+	test('recognises PDF, JPEG, PNG and WebP by their signatures', () => {
+		expect(receiptType(bytes('%PDF-1.7\n'))).toBe('application/pdf');
+		expect(receiptType(bytes([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
+		expect(receiptType(bytes([0x89], 'PNG', [0x0d, 0x0a, 0x1a, 0x0a]))).toBe('image/png');
+		expect(receiptType(bytes('RIFF', [0x24, 0, 0, 0], 'WEBPVP8 '))).toBe('image/webp');
+	});
+
+	test('rejects other content, whatever it is called', () => {
+		expect(receiptType(bytes('<svg xmlns="http://www.w3.org/2000/svg">'))).toBeNull();
+		expect(receiptType(bytes('RIFF', [0, 0, 0, 0], 'WAVE'))).toBeNull();
+		expect(receiptType(new Uint8Array())).toBeNull();
 	});
 });
 

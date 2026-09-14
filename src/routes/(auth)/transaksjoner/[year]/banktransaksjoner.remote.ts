@@ -1,5 +1,5 @@
 import { error } from '@sveltejs/kit';
-import { query, command } from '$app/server';
+import { query, command, form, requested } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
@@ -18,6 +18,7 @@ import { createBankAutoVoucher, createBankAutoVouchers, deleteBankAutoVoucher } 
 import { inYear } from '$lib/server/period';
 import { findRule, upsertRule } from '$lib/server/matching';
 import { decodeBuffer, detectAndParse } from '$lib/server/csv';
+import { MAX_RECEIPT_BYTES, receiptType } from '$lib/server/receipt';
 
 export const get_transactions = query(
 	v.object({
@@ -517,14 +518,13 @@ export const get_attachments = query(
 	}
 );
 
-export const upload_attachment = command(
+// A form, not a command: forms send files as raw bytes, commands base64-encode them twice
+export const upload_attachment = form(
 	v.object({
 		transactionId: v.pipe(v.string(), v.minLength(1)),
-		fileName: v.pipe(v.string(), v.minLength(1)),
-		mimeType: v.picklist(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']),
-		content: v.pipe(v.string(), v.minLength(1))
+		file: v.pipe(v.file(), v.maxSize(MAX_RECEIPT_BYTES, 'Filen er for stor (maks 10 MB)'))
 	}),
-	async ({ transactionId, fileName, mimeType, content }) => {
+	async ({ transactionId, file }) => {
 		const orgId = requireOrgId();
 		const [tx] = await db
 			.select({ id: bankTransaction.id })
@@ -532,15 +532,19 @@ export const upload_attachment = command(
 			.where(and(eq(bankTransaction.id, transactionId), eq(bankTransaction.organizationId, orgId)))
 			.limit(1);
 		if (!tx) error(404, 'Transaksjon ikke funnet');
+		const bytes = Buffer.from(await file.arrayBuffer());
+		const mimeType = receiptType(bytes);
+		if (!mimeType) error(400, 'Vedlegget må være PDF, JPEG, PNG eller WebP');
 		await db.insert(attachment).values({
 			id: generateId(),
 			bankTransactionId: transactionId,
 			organizationId: orgId,
-			fileName,
+			fileName: file.name,
 			mimeType,
-			content,
+			content: bytes.toString('base64'),
 			uploadedAt: new Date()
 		});
+		await requested(get_attachments, 5).refreshAll();
 	}
 );
 
