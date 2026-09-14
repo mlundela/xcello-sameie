@@ -2,11 +2,57 @@
     import { formatKr } from '$lib/money';
     import { errorMessage } from '$lib/notify.svelte';
     import {page} from '$app/state';
-    import {get_flat, set_payment_responsible} from './flat.remote';
+    import {get_flat, record_ownership_change, set_payment_responsible} from './flat.remote';
 
     // Derived: navigating from one flat to another reuses this component
     const flatNo = $derived(page.params.flatNo!);
     const data = $derived(get_flat({flatNo}));
+
+    type NewOwner = { name: string; publicId: string; shareNumerator: number; shareDenominator: number };
+    const emptyOwner = (): NewOwner => ({name: '', publicId: '', shareNumerator: 1, shareDenominator: 1});
+
+    let changing = $state(false);
+    let changeDate = $state('');
+    let newOwners = $state<NewOwner[]>([emptyOwner()]);
+    let paymentResponsible = $state(0);
+    let changeError = $state('');
+    let saving = $state(false);
+
+    function addOwner() {
+        newOwners.push(emptyOwner());
+        // Two or more owners usually split evenly
+        for (const o of newOwners) {
+            o.shareNumerator = 1;
+            o.shareDenominator = newOwners.length;
+        }
+    }
+
+    function removeOwner(i: number) {
+        newOwners.splice(i, 1);
+        if (paymentResponsible >= newOwners.length) paymentResponsible = 0;
+    }
+
+    async function saveOwnershipChange(e: SubmitEvent) {
+        e.preventDefault();
+        changeError = '';
+        saving = true;
+        try {
+            await record_ownership_change({
+                flatNo,
+                date: changeDate,
+                owners: newOwners.map((o) => ({...o, publicId: o.publicId || undefined})),
+                paymentResponsible
+            }).updates(data);
+            changing = false;
+            changeDate = '';
+            newOwners = [emptyOwner()];
+            paymentResponsible = 0;
+        } catch (err) {
+            changeError = errorMessage(err);
+        } finally {
+            saving = false;
+        }
+    }
 </script>
 
 <main class="max-w-xl px-6 py-8 flex flex-col gap-4">
@@ -70,6 +116,71 @@
                             </li>
                         {/each}
                     </ul>
+                </div>
+            </div>
+        {/if}
+
+        {#if page.data.canEdit}
+            <div class="card bg-base-100 shadow-sm">
+                <div class="card-body">
+                    {#if !changing}
+                        <div class="flex items-center justify-between gap-2">
+                            <p class="text-sm text-base-content/70">Er leiligheten solgt?</p>
+                            <button class="btn btn-sm" onclick={() => (changing = true)}>Registrer eierskifte</button>
+                        </div>
+                    {:else}
+                        <form onsubmit={saveOwnershipChange} class="flex flex-col gap-3">
+                            <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide">Registrer eierskifte</p>
+                            <label class="flex flex-col gap-1">
+                                <span class="text-sm">Overtakelsesdato</span>
+                                <input type="date" bind:value={changeDate} required class="input input-bordered input-sm w-44"/>
+                                <span class="text-xs text-base-content/50">Nåværende eiere avsluttes dagen før. Felleskostnader for en måned betales av den som eier leiligheten den 1.</span>
+                            </label>
+
+                            {#each newOwners as o, i}
+                                <fieldset class="flex flex-wrap items-end gap-2 border-t border-base-200 pt-3">
+                                    <legend class="sr-only">Ny eier {i + 1}</legend>
+                                    <label class="flex flex-col gap-1 flex-1 min-w-40">
+                                        <span class="text-xs">Navn</span>
+                                        <input bind:value={o.name} required class="input input-bordered input-sm"/>
+                                    </label>
+                                    <label class="flex flex-col gap-1 w-36">
+                                        <span class="text-xs">Fødselsnr./org.nr. (valgfri)</span>
+                                        <input bind:value={o.publicId} class="input input-bordered input-sm"/>
+                                    </label>
+                                    <label class="flex flex-col gap-1 w-24">
+                                        <span class="text-xs">Andel</span>
+                                        <span class="flex items-center gap-1">
+                                            <input type="number" min="1" bind:value={o.shareNumerator} aria-label="Andel teller" class="input input-bordered input-sm w-12 px-1"/>
+                                            /
+                                            <input type="number" min="1" bind:value={o.shareDenominator} aria-label="Andel nevner" class="input input-bordered input-sm w-12 px-1"/>
+                                        </span>
+                                    </label>
+                                    <label class="flex items-center gap-1 text-xs pb-2">
+                                        <input type="radio" name="new-payment-responsible" value={i} bind:group={paymentResponsible} class="radio radio-xs"/>
+                                        Betaler
+                                    </label>
+                                    {#if newOwners.length > 1}
+                                        <button type="button" class="btn btn-ghost btn-xs text-error mb-1" onclick={() => removeOwner(i)}>Fjern</button>
+                                    {/if}
+                                </fieldset>
+                            {/each}
+
+                            <button type="button" class="btn btn-ghost btn-xs self-start" onclick={addOwner}>+ Legg til eier</button>
+
+                            {#if changeError}
+                                <div role="alert" class="alert alert-error alert-soft"><span>{changeError}</span></div>
+                            {/if}
+
+                            <div class="flex gap-2">
+                                <button type="button" class="btn btn-ghost btn-sm" onclick={() => (changing = false)}>Avbryt</button>
+                                <button type="submit" class="btn btn-primary btn-sm" disabled={saving}>
+                                    {#if saving}<span class="loading loading-spinner loading-xs"></span>{/if}
+                                    Lagre eierskifte
+                                </button>
+                            </div>
+                        </form>
+                    {/if}
                 </div>
             </div>
         {/if}
