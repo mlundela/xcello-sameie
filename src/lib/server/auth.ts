@@ -50,6 +50,10 @@ async function fetchSeksjoner(addressId: unknown): Promise<Seksjon[]> {
 
 export const auth = betterAuth({
     baseURL: env.ORIGIN,
+    // Rate limiting (on when NODE_ENV=production) keys on this header, which hooks.server.ts sets from
+    // the adapter's client address. The default, x-forwarded-for, is missing without a proxy (one
+    // bucket for everyone) and chosen by the client with one.
+    advanced: { ipAddress: { ipAddressHeaders: ['x-client-address'] } },
     // better-auth rejects a missing secret when NODE_ENV=production, which includes `vite build`
     secret: building ? 'build-time-placeholder-never-used-at-runtime' : env.BETTER_AUTH_SECRET,
     database: drizzleAdapter(db, {

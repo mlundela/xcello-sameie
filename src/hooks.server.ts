@@ -19,6 +19,14 @@ export const handleError: HandleServerError = ({ error, status }) => {
 	return { message: 'Noe gikk galt. Prøv igjen.' };
 };
 
+// Pages also get a CSP (svelte.config.js). These apply to every response, receipts, PDFs and the auth API included.
+const securityHeaders = {
+	'Referrer-Policy': 'same-origin',
+	'X-Content-Type-Options': 'nosniff',
+	'X-Frame-Options': 'DENY',
+	'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()'
+};
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const session = await auth.api.getSession({ headers: event.request.headers });
 	event.locals.role = null;
@@ -26,5 +34,12 @@ export const handle: Handle = async ({ event, resolve }) => {
 		event.locals.role = await ensureActiveMembership(session, event.request.headers);
 	}
 	event.locals.session = session;
-	return svelteKitHandler({ event, resolve, auth, building });
+	if (event.url.pathname.startsWith('/api/auth')) {
+		// better-auth rate-limits per client IP from this header (see auth.ts). Overwriting it means a
+		// client can't choose its bucket; behind a proxy, adapter-node reads ADDRESS_HEADER instead.
+		event.request.headers.set('x-client-address', event.getClientAddress());
+	}
+	const response = await svelteKitHandler({ event, resolve, auth, building });
+	for (const [name, value] of Object.entries(securityHeaders)) response.headers.set(name, value);
+	return response;
 };

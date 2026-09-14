@@ -59,6 +59,12 @@ docker run -p 3000:3000 \
 
 The server listens on port 3000 and runs as the `node` user. Pending migrations run at startup, before the first request is served.
 
+### Security
+
+- Pages send a Content Security Policy (`kit.csp` in `svelte.config.js`): scripts only from the app, with a per-request nonce; network requests only to the app, `data.brreg.no` and `ws.geonorge.no`; no framing. Every response, receipts and PDFs included, also gets `Referrer-Policy`, `X-Content-Type-Options`, `X-Frame-Options` and `Permissions-Policy` (`hooks.server.ts`).
+- better-auth rate-limits `/api/auth` when `NODE_ENV=production` (set in the image): sign-in and sign-up 3 requests per 10 seconds, password reset 3 per minute, everything else 100 per 10 seconds, per client IP. The counters live in memory, so they are per server instance.
+- The client IP is the one adapter-node sees. Behind a reverse proxy that is the proxy's address, so every user would share one limit: set `ADDRESS_HEADER=X-Forwarded-For` (and `XFF_DEPTH` if there are several proxies) so the real client address is used.
+
 ## Releases
 
 Pushing a tag like `1.2.3` runs `.github/workflows/docker.yml`, which builds the image and pushes it to `ghcr.io/mlundela/xcello-sameie` tagged `1.2.3`, `1.2`, `1` and `latest`.
