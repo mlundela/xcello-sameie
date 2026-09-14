@@ -10,7 +10,8 @@ export const get_flats = query(async () => {
 	const rows = await db
 		.select({ flat, ownership: flatOwnership, owner })
 		.from(flat)
-		.leftJoin(flatOwnership, eq(flatOwnership.flatId, flat.id))
+		// Current owners only: an ownership that has ended belongs to a former owner
+		.leftJoin(flatOwnership, and(eq(flatOwnership.flatId, flat.id), isNull(flatOwnership.toDate)))
 		.leftJoin(owner, eq(owner.id, flatOwnership.ownerId))
 		.where(eq(flat.organizationId, orgId))
 		.orderBy(flat.nummer);
