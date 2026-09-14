@@ -52,3 +52,17 @@ export async function sendInviteEmail(opts: {
 		`
 	});
 }
+
+export async function sendPasswordResetEmail(opts: { to: string; url: string }) {
+	await client().emails.send({
+		from: env.EMAIL_FROM!,
+		to: opts.to,
+		subject: 'Velg nytt passord',
+		html: `
+			<p>Hei,</p>
+			<p>Vi har fått en forespørsel om å endre passordet ditt. Klikk lenken nedenfor for å velge et nytt:</p>
+			<p><a href="${opts.url}">Velg nytt passord</a></p>
+			<p>Lenken utløper etter én time. Har du ikke bedt om dette, kan du se bort fra e-posten.</p>
+		`
+	});
+}

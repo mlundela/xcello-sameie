@@ -5,7 +5,7 @@ import {db} from './db';
 import * as schema from '$lib/schema';
 import {flat, flatOwnership, ledgerAccount, matchingRule, member, owner} from '$lib/schema';
 import {env} from '$env/dynamic/private';
-import {sendInviteEmail, sendVerificationEmail} from './email';
+import {sendInviteEmail, sendPasswordResetEmail, sendVerificationEmail} from './email';
 import {eq} from "drizzle-orm";
 import {DEFAULT_ACCOUNTS} from './default-accounts';
 import {building} from '$app/environment';
@@ -67,6 +67,13 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
         requireEmailVerification: true,
+        sendResetPassword: async ({user, url}) => {
+            // Don't log `url`: it lets anyone set the password
+            console.log('Sending password reset email to', user.email);
+            await sendPasswordResetEmail({to: user.email, url});
+        },
+        // A session someone else may have taken over ends when the password changes
+        revokeSessionsOnPasswordReset: true,
     },
     emailVerification: {
         sendVerificationEmail: async ({user, url}: { user: { email: string }; url: string }) => {

@@ -32,6 +32,12 @@
 		<div class="card-body">
 			<h1 class="card-title text-2xl mb-2">Velkommen tilbake</h1>
 
+			{#if page.url.searchParams.has('reset')}
+				<div role="alert" class="alert alert-success alert-soft">
+					<span>Passordet er endret. Logg inn med det nye passordet.</span>
+				</div>
+			{/if}
+
 			<form onsubmit={signInWithEmail} class="flex flex-col gap-3">
 				<label class="floating-label">
 					<input
@@ -56,6 +62,7 @@
 					/>
 					<span>Passord</span>
 				</label>
+				<a href="/glemt-passord" class="link link-hover text-sm self-end">Glemt passord?</a>
 
 				{#if error}
 					<div role="alert" class="alert alert-error alert-soft">
