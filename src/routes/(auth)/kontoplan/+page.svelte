@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
+	import { REQUIRED_ACCOUNT_CODES } from '$lib/accounts';
 	import { get_accounts, create_account, delete_account, seed_default_accounts } from './kontoplan.remote';
 
 	const accounts = get_accounts();
@@ -86,7 +87,7 @@
 										<td class="font-mono">{account.code}</td>
 										<td>{account.name}</td>
 										<td class="text-right">
-											{#if page.data.canEdit}
+											{#if page.data.canEdit && !REQUIRED_ACCOUNT_CODES.includes(account.code)}
 												<button
 													class="btn btn-ghost btn-xs text-error"
 													onclick={() => delete_account({ id: account.id })}

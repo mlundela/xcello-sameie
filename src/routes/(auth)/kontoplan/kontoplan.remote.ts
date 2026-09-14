@@ -2,11 +2,12 @@ import { error } from '@sveltejs/kit';
 import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
-import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
+import { requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { ledgerAccount, bankTransaction, voucherLine, matchingRule } from '$lib/schema';
 import { and, eq, count } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
+import { REQUIRED_ACCOUNT_CODES } from '$lib/accounts';
 
 export const get_accounts = query(async () => {
 	const orgId = requireOrgId();
@@ -25,7 +26,13 @@ export const create_account = command(
 	}),
 	async ({ code, name, type }) => {
 		const orgId = requireAdmin();
-		await db.insert(ledgerAccount).values({ id: generateId(), organizationId: orgId, code, name, type });
+		// Codes are unique per sameie (la_org_code_idx)
+		const created = await db
+			.insert(ledgerAccount)
+			.values({ id: generateId(), organizationId: orgId, code, name, type })
+			.onConflictDoNothing()
+			.returning({ id: ledgerAccount.id });
+		if (created.length === 0) error(409, `Kontonummer ${code} finnes allerede`);
 		await get_accounts().refresh();
 	}
 );
@@ -34,7 +41,12 @@ export const delete_account = command(
 	v.object({ id: v.string() }),
 	async ({ id }) => {
 		const orgId = requireAdmin();
-		await assertInOrg(ledgerAccount, [id], orgId);
+		const [account] = await db
+			.select({ code: ledgerAccount.code })
+			.from(ledgerAccount)
+			.where(and(eq(ledgerAccount.id, id), eq(ledgerAccount.organizationId, orgId)));
+		if (!account) error(404, 'Ikke funnet');
+		if (REQUIRED_ACCOUNT_CODES.includes(account.code)) error(409, `Konto ${account.code} brukes av regnskapet og kan ikke slettes`);
 		const usage = await Promise.all([
 			db.select({ n: count() }).from(bankTransaction).where(eq(bankTransaction.ledgerAccountId, id)),
 			db.select({ n: count() }).from(voucherLine).where(eq(voucherLine.ledgerAccountId, id)),
