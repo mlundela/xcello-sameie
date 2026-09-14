@@ -12,10 +12,10 @@ import {
 	accountingPeriod,
 	attachment
 } from '$lib/schema';
-import { eq, and, sql, inArray, ilike, gt, gte, lt, lte, asc, desc } from 'drizzle-orm';
+import { eq, and, or, sql, count, inArray, isNull, ilike, gt, gte, lt, lte, asc, desc } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createBankAutoVoucher, createBankAutoVouchers, deleteBankAutoVoucher } from '$lib/server/voucher';
-import { inYear } from '$lib/server/period';
+import { inMonth, inYear } from '$lib/server/period';
 import { findRule, upsertRule } from '$lib/server/matching';
 import { decodeBuffer, detectAndParse } from '$lib/server/csv';
 import { MAX_RECEIPT_BYTES, receiptType } from '$lib/server/receipt';
@@ -23,10 +23,19 @@ import { MAX_RECEIPT_BYTES, receiptType } from '$lib/server/receipt';
 export const get_transactions = query(
 	v.object({
 		year: v.optional(v.pipe(v.number(), v.integer())),
-		type: v.optional(v.picklist(['income', 'expense']))
+		type: v.optional(v.picklist(['income', 'expense'])),
+		month: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(12))),
+		// The work left: unmatched, or still missing a receipt
+		todo: v.optional(v.boolean())
 	}),
-	async ({ year, type }) => {
+	async ({ year, type, month, todo }) => {
 		const orgId = requireOrgId();
+		const attachments = db
+			.select({ bankTransactionId: attachment.bankTransactionId, n: count().as('n') })
+			.from(attachment)
+			.where(eq(attachment.organizationId, orgId))
+			.groupBy(attachment.bankTransactionId)
+			.as('attachments');
 		const rows = await db
 			.select({
 				id: bankTransaction.id,
@@ -42,18 +51,22 @@ export const get_transactions = query(
 				ledgerAccountCode: ledgerAccount.code,
 				bankStatementId: bankTransaction.bankStatementId,
 				fileName: bankStatement.fileName,
-				attachmentCount: sql<number>`(select count(*) from attachment where bank_transaction_id = ${bankTransaction.id})`.mapWith(Number),
+				attachmentCount: sql<number>`coalesce(${attachments.n}, 0)`.mapWith(Number),
 				receiptNotRequired: bankTransaction.receiptNotRequired
 			})
 			.from(bankTransaction)
 			.leftJoin(owner, eq(owner.id, bankTransaction.matchedOwnerId))
 			.leftJoin(ledgerAccount, eq(ledgerAccount.id, bankTransaction.ledgerAccountId))
 			.innerJoin(bankStatement, eq(bankStatement.id, bankTransaction.bankStatementId))
+			.leftJoin(attachments, eq(attachments.bankTransactionId, bankTransaction.id))
 			.where(
 				and(
 					eq(bankTransaction.organizationId, orgId),
-					year ? inYear(bankTransaction.date, year) : undefined,
-					type === 'income' ? gt(bankTransaction.amountOre, 0) : type === 'expense' ? lt(bankTransaction.amountOre, 0) : undefined
+					year ? (month ? inMonth(bankTransaction.date, year, month) : inYear(bankTransaction.date, year)) : undefined,
+					type === 'income' ? gt(bankTransaction.amountOre, 0) : type === 'expense' ? lt(bankTransaction.amountOre, 0) : undefined,
+					todo
+						? or(eq(bankTransaction.status, 'UNMATCHED'), and(eq(bankTransaction.receiptNotRequired, false), isNull(attachments.n)))
+						: undefined
 				)
 			)
 			.orderBy(asc(bankTransaction.date), asc(bankTransaction.description));

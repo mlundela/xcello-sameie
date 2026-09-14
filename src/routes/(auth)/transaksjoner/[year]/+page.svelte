@@ -28,8 +28,26 @@
 		: 'all'
 	);
 
+	const MONTHS = ['Januar', 'Februar', 'Mars', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Desember'];
+	const month = $derived.by(() => {
+		const m = Number(page.url.searchParams.get('month'));
+		return Number.isInteger(m) && m >= 1 && m <= 12 ? m : undefined;
+	});
+	const todo = $derived(page.url.searchParams.get('todo') === '1');
+
+	/** Changes some filters in the URL and keeps the others */
+	function setFilters(changes: Record<string, string | null>) {
+		const params = new URLSearchParams(page.url.searchParams);
+		for (const [key, value] of Object.entries(changes)) {
+			if (value) params.set(key, value);
+			else params.delete(key);
+		}
+		const search = params.toString();
+		goto(`/transaksjoner/${year}${search ? `?${search}` : ''}`);
+	}
+
 	function txQuery() {
-		return get_transactions({ year, type: filter === 'all' ? undefined : filter });
+		return get_transactions({ year, type: filter === 'all' ? undefined : filter, month, todo: todo || undefined });
 	}
 	let transactions = $derived(txQuery());
 
@@ -131,11 +149,28 @@
 				</select>
 			</div>
 
+			<select
+				class="select select-bordered select-sm w-36"
+				aria-label="Måned"
+				value={month ?? ''}
+				onchange={(e) => setFilters({ month: e.currentTarget.value || null })}
+			>
+				<option value="">Hele året</option>
+				{#each MONTHS as name, i}
+					<option value={i + 1}>{name}</option>
+				{/each}
+			</select>
+
 			<div role="tablist" class="tabs tabs-box tabs-sm">
-				<button role="tab" class="tab" class:tab-active={filter === 'all'} onclick={() => goto(`/transaksjoner/${year}`)}>Alle</button>
-				<button role="tab" class="tab" class:tab-active={filter === 'income'} onclick={() => goto(`/transaksjoner/${year}?type=income`)}>Innbetalinger</button>
-				<button role="tab" class="tab" class:tab-active={filter === 'expense'} onclick={() => goto(`/transaksjoner/${year}?type=expense`)}>Utbetalinger</button>
+				<button role="tab" class="tab" class:tab-active={filter === 'all'} onclick={() => setFilters({ type: null })}>Alle</button>
+				<button role="tab" class="tab" class:tab-active={filter === 'income'} onclick={() => setFilters({ type: 'income' })}>Innbetalinger</button>
+				<button role="tab" class="tab" class:tab-active={filter === 'expense'} onclick={() => setFilters({ type: 'expense' })}>Utbetalinger</button>
 			</div>
+
+			<label class="flex items-center gap-2 text-sm cursor-pointer">
+				<input type="checkbox" class="toggle toggle-sm" checked={todo} onchange={(e) => setFilters({ todo: e.currentTarget.checked ? '1' : null })} />
+				Til behandling
+			</label>
 
 			<div class="ml-auto flex items-center gap-2">
 				{#if importResult}
@@ -165,7 +200,7 @@
 		{#if rows.length === 0}
 			<div class="card bg-base-100">
 				<div class="card-body items-center">
-					<p class="text-base-content/60">Ingen transaksjoner for {year}.</p>
+					<p class="text-base-content/60">{month || todo ? 'Ingen transaksjoner passer filteret.' : `Ingen transaksjoner for ${year}.`}</p>
 				</div>
 			</div>
 		{:else}
