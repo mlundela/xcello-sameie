@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Package manager is **bun** (`packageManager: bun@1.4.2`). CI installs that version; bump the Dockerfile's `oven/bun` tag with it.
+Package manager is **bun** (`packageManager: bun@1.4.2`). CI installs that version; bump the Dockerfile's `oven/bun` tag with it. Two dev dependencies deliberately lag `bun outdated`: `typescript` stays on the newest major svelte-check supports (its peer range stops at 6), and `@types/node` follows the Node major the Dockerfile runs (`node:24-slim`), so types never offer APIs production lacks.
 
 ```bash
 docker compose up -d db          # Postgres 17 on :5432 (xcello/xcello/xcello)
