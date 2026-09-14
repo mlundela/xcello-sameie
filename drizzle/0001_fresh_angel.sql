@@ -1,0 +1,1 @@
+ALTER TABLE "flat_rent" ADD CONSTRAINT "fr_range_check" CHECK ("flat_rent"."to_year" IS NULL OR "flat_rent"."to_year" * 12 + "flat_rent"."to_month" >= "flat_rent"."from_year" * 12 + "flat_rent"."from_month");

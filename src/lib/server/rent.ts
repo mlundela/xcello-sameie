@@ -1,6 +1,45 @@
+import { error } from '@sveltejs/kit';
+import { generateId } from 'better-auth';
 import { and, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 import { db } from './db';
 import { flat, flatOwnership, flatRent, owner } from '$lib/schema';
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Sets a flat's monthly rent (øre) from `fromYear`/`fromMonth` onward without overlapping history:
+ * - same start month as the current rate: corrects that rate's amount
+ * - later month: closes the current rate the month before and adds the new one
+ * - earlier month: refused, since months already covered by the current rate would get two rates
+ */
+export async function setRentFrom(tx: Tx, flatId: string, fromYear: number, fromMonth: number, amountOre: number) {
+	const [current] = await tx
+		.select()
+		.from(flatRent)
+		.where(and(eq(flatRent.flatId, flatId), isNull(flatRent.toYear)))
+		.limit(1);
+	// Months counted from year 0, so comparisons and "the month before" are plain arithmetic
+	const start = fromYear * 12 + fromMonth - 1;
+
+	if (current) {
+		const currentStart = current.fromYear * 12 + current.fromMonth - 1;
+		if (start === currentStart) {
+			await tx.update(flatRent).set({ amount: amountOre }).where(eq(flatRent.id, current.id));
+			return;
+		}
+		if (start < currentStart) {
+			const [f] = await tx.select({ flatNo: flat.flatNo }).from(flat).where(eq(flat.id, flatId));
+			error(400, `Ny sats for ${f?.flatNo ?? 'leiligheten'} kan ikke starte før gjeldende sats (fra ${String(current.fromMonth).padStart(2, '0')}.${current.fromYear})`);
+		}
+		const lastMonth = start - 1;
+		await tx
+			.update(flatRent)
+			.set({ toYear: Math.floor(lastMonth / 12), toMonth: (lastMonth % 12) + 1 })
+			.where(eq(flatRent.id, current.id));
+	}
+
+	await tx.insert(flatRent).values({ id: generateId(), flatId, fromYear, fromMonth, toYear: null, toMonth: null, amount: amountOre });
+}
 
 type Rent = Pick<typeof flatRent.$inferSelect, 'flatId' | 'fromYear' | 'fromMonth' | 'toYear' | 'toMonth' | 'amount'>;
 

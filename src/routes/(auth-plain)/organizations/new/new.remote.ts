@@ -3,7 +3,8 @@ import * as v from 'valibot';
 import { ADDRESS_ID_PATTERN, auth } from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId, requireSession } from '$lib/server/tenant';
-import { flat, accountingPeriod, flatRent, flatOwnership, owner } from '$lib/schema';
+import { flat, accountingPeriod, flatOwnership, owner } from '$lib/schema';
+import { setRentFrom } from '$lib/server/rent';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createOpeningVoucher } from '$lib/server/voucher';
@@ -76,27 +77,10 @@ export const set_initial_rent = command(
 	async ({ fromYear, rents }) => {
 		const orgId = requireAdmin();
 		await assertInOrg(flat, rents.map((r) => r.flatId), orgId);
+		// Saving this step again (going back in the wizard) corrects the rate instead of overlapping it
 		await db.transaction(async (tx) => {
 			for (const { flatId, amountKr } of rents) {
-				const [openEntry] = await tx
-					.select()
-					.from(flatRent)
-					.where(and(eq(flatRent.flatId, flatId), isNull(flatRent.toYear)))
-					.limit(1);
-
-				if (openEntry) {
-					await tx.update(flatRent).set({ toYear: fromYear, toMonth: 12 }).where(eq(flatRent.id, openEntry.id));
-				}
-
-				await tx.insert(flatRent).values({
-					id: generateId(),
-					flatId,
-					fromYear,
-					fromMonth: 1,
-					toYear: null,
-					toMonth: null,
-					amount: amountKr * 100
-				});
+				await setRentFrom(tx, flatId, fromYear, 1, amountKr * 100);
 			}
 		});
 	}

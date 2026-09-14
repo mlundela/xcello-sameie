@@ -8,6 +8,13 @@
       "when": 1789306664368,
       "tag": "0000_yummy_sprite",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789367425308,
+      "tag": "0001_fresh_angel",
+      "breakpoints": true
     }
   ]
 }

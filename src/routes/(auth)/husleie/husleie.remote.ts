@@ -2,9 +2,9 @@ import { query, command } from '$app/server';
 import * as v from 'valibot';
 import { db } from '$lib/server/db';
 import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
+import { setRentFrom } from '$lib/server/rent';
 import { flat, flatRent } from '$lib/schema';
-import { and, eq, isNull, desc } from 'drizzle-orm';
-import { generateId } from 'better-auth';
+import { eq, desc } from 'drizzle-orm';
 
 export const get_husleie = query(async () => {
 	const orgId = requireOrgId();
@@ -56,37 +56,10 @@ export const set_bulk_rent = command(
 		const orgId = requireAdmin();
 		await assertInOrg(flat, rents.map((r) => r.flatId), orgId);
 
-		let toMonth = fromMonth - 1;
-		let toYear = fromYear;
-		if (toMonth === 0) {
-			toMonth = 12;
-			toYear = fromYear - 1;
-		}
-
+		// All flats or none: one refused start month rolls back the whole update
 		await db.transaction(async (tx) => {
 			for (const { flatId, amountKr } of rents) {
-				const [openEntry] = await tx
-					.select()
-					.from(flatRent)
-					.where(and(eq(flatRent.flatId, flatId), isNull(flatRent.toYear)))
-					.limit(1);
-
-				if (openEntry) {
-					await tx
-						.update(flatRent)
-						.set({ toYear, toMonth })
-						.where(eq(flatRent.id, openEntry.id));
-				}
-
-				await tx.insert(flatRent).values({
-					id: generateId(),
-					flatId,
-					fromYear,
-					fromMonth,
-					toYear: null,
-					toMonth: null,
-					amount: amountKr * 100
-				});
+				await setRentFrom(tx, flatId, fromYear, fromMonth, amountKr * 100);
 			}
 		});
 	}

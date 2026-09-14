@@ -1,4 +1,5 @@
-import { pgTable, text, boolean, timestamp, integer, date, uniqueIndex, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, boolean, timestamp, integer, date, uniqueIndex, index, check } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const user = pgTable('user', {
 	id: text('id').primaryKey(),
@@ -130,7 +131,11 @@ export const flatRent = pgTable('flat_rent', {
 	toYear: integer('to_year'),
 	toMonth: integer('to_month'),
 	amount: integer('amount').notNull()
-}, (t) => [index('fr_flat_idx').on(t.flatId)]);
+}, (t) => [
+	index('fr_flat_idx').on(t.flatId),
+	// A rate can't end before it starts (setRentFrom keeps ranges from overlapping)
+	check('fr_range_check', sql`${t.toYear} IS NULL OR ${t.toYear} * 12 + ${t.toMonth} >= ${t.fromYear} * 12 + ${t.fromMonth}`)
+]);
 
 export const ledgerAccount = pgTable('ledger_account', {
 	id: text('id').primaryKey(),
