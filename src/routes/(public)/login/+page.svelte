@@ -2,9 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { safeNext } from '$lib/next';
 
 	// Signed-in users never get here: +page.server.ts redirects them before render
-	const next = $derived(page.url.searchParams.get('next') ?? '/dashboard');
+	const next = $derived(safeNext(page.url.searchParams.get('next')));
 
 	let email = $state('');
 	let password = $state('');
@@ -79,7 +80,7 @@
 			<div class="divider text-base-content/40"></div>
 
 			<p class="text-center text-sm text-base-content/60">
-				Ingen konto? <a href="/signup" class="link link-primary">Registrer deg</a>
+				Ingen konto? <a href="/signup?next={encodeURIComponent(next)}" class="link link-primary">Registrer deg</a>
 			</p>
 		</div>
 	</div>

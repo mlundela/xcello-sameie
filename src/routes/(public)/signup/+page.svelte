@@ -1,10 +1,14 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { authClient } from '$lib/auth-client';
+	import { safeNext } from '$lib/next';
 
-	const session = authClient.useSession();
+	// Signed-in users never get here: +page.server.ts redirects them before render.
+	// `next` survives email verification (e.g. back to an invitation); `email` is prefilled from the invite.
+	const next = $derived(safeNext(page.url.searchParams.get('next')));
 
 	let name = $state('');
-	let email = $state('');
+	let email = $state(page.url.searchParams.get('email') ?? '');
 	let password = $state('');
 	let error = $state('');
 	let loading = $state(false);
@@ -18,7 +22,7 @@
 			name,
 			email,
 			password,
-			callbackURL: '/dashboard'
+			callbackURL: next
 		});
 		if (result.error) error = result.error.message ?? 'Registrering feilet';
 		else submitted = true;
@@ -27,9 +31,7 @@
 </script>
 
 <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
-	{#if $session.isPending}
-		<span class="loading loading-spinner loading-lg text-primary"></span>
-	{:else if submitted}
+	{#if submitted}
 		<div class="card w-full max-w-sm bg-base-100 shadow-xl">
 			<div class="card-body items-center text-center">
 				<h1 class="card-title text-2xl mb-2">Sjekk e-posten din</h1>
@@ -95,7 +97,7 @@
 				<div class="divider text-base-content/40"></div>
 
 				<p class="text-center text-sm text-base-content/60">
-					Har du allerede konto? <a href="/login" class="link link-primary">Logg inn</a>
+					Har du allerede konto? <a href="/login?next={encodeURIComponent(next)}" class="link link-primary">Logg inn</a>
 				</p>
 			</div>
 		</div>

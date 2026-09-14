@@ -13,8 +13,11 @@ export const get_invitation = query(
 		const [inv] = await db.select().from(invitation).where(eq(invitation.id, id));
 		if (!inv) error(404, 'Invitasjonen finnes ikke');
 
+		// Public page: the visitor may be signed out, or signed in with another address
+		const signedInEmail = getRequestEvent().locals.session?.user.email ?? null;
+
 		if (inv.status !== 'pending' || inv.expiresAt < new Date()) {
-			return { expired: true, status: inv.status, invitation: null };
+			return { expired: true, status: inv.status, invitation: null, signedInEmail };
 		}
 
 		const [org] = await db
@@ -30,7 +33,8 @@ export const get_invitation = query(
 				email: inv.email,
 				role: inv.role ?? 'member',
 				organizationName: org?.name ?? 'et sameie'
-			}
+			},
+			signedInEmail
 		};
 	}
 );
@@ -38,11 +42,16 @@ export const get_invitation = query(
 export const accept_invitation = command(
 	v.object({ invitationId: v.string() }),
 	async ({ invitationId }) => {
-		requireSession();
-		const event = getRequestEvent();
+		const session = requireSession();
+		const [inv] = await db.select({ email: invitation.email }).from(invitation).where(eq(invitation.id, invitationId));
+		if (!inv) error(404, 'Invitasjonen finnes ikke');
+		// better-auth refuses this too, but in English
+		if (inv.email.toLowerCase() !== session.user.email.toLowerCase()) {
+			error(403, `Invitasjonen er sendt til ${inv.email}. Logg inn med den adressen for å godta den.`);
+		}
 		await auth.api.acceptInvitation({
 			body: { invitationId },
-			headers: event.request.headers
+			headers: getRequestEvent().request.headers
 		});
 	}
 );
