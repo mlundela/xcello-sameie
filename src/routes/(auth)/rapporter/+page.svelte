@@ -151,6 +151,7 @@
 													class="input input-bordered input-xs w-28 text-right font-mono"
 													disabled={!page.data.canEdit}
 													value={oreToKr(o.balanceOre)}
+													aria-label="Inngående saldo for {o.ownerName}"
 													placeholder="0,00"
 													onchange={(e) => {
 														const val = krToOre((e.currentTarget as HTMLInputElement).value);

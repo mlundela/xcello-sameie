@@ -107,7 +107,7 @@
 	}
 </script>
 
-<main class="max-w-5xl px-6 py-8 flex flex-col gap-6">
+<main class="max-w-5xl px-4 sm:px-6 py-8 flex flex-col gap-6">
 	<div class="breadcrumbs text-sm">
 		<ul>
 			<li><a href="/dashboard">Hjem</a></li>
@@ -170,7 +170,7 @@
 			</div>
 		{:else}
 			<div class="card bg-base-100">
-				<div class="card-body p-0">
+				<div class="card-body p-0 overflow-x-auto">
 					<table class="table table-sm">
 						<thead>
 							<tr>
@@ -203,6 +203,7 @@
 												{owners}
 												{accounts}
 												class="select-xs"
+												label="Kategori for {row.userDescription ?? row.description}"
 												placeholder={isIncome ? 'Kategoriser...' : 'Velg...'}
 												onpick={(k) => {
 													// Picking an owner on an inflow, or an account on an outflow, offers to create a matching rule

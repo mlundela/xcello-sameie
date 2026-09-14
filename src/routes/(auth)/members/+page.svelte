@@ -173,7 +173,7 @@
                             <span>E-post</span>
                         </label>
 
-                        <select bind:value={role} class="select select-bordered w-full">
+                        <select bind:value={role} aria-label="Rolle" class="select select-bordered w-full">
                             <option value="member">{roleLabel('member')}</option>
                             <option value="admin">{roleLabel('admin')}</option>
                         </select>

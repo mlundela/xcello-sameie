@@ -1,6 +1,6 @@
 <script lang="ts">
     import {authClient} from '$lib/auth-client';
-    import {goto, refreshAll} from '$app/navigation';
+    import {afterNavigate, goto, refreshAll} from '$app/navigation';
     import {page} from '$app/state';
     import {errorMessage} from '$lib/notify.svelte';
     import {get_layout_data} from './layout.remote';
@@ -8,6 +8,10 @@
     const {children} = $props();
 
     const data = get_layout_data();
+
+    // The drawer (below lg) closes once a menu link has navigated
+    let navOpen = $state(false);
+    afterNavigate(() => (navOpen = false));
 
     async function switchOrg(organizationId: string) {
         await authClient.organization.setActive({organizationId});
@@ -33,8 +37,25 @@
     </div>
 {:then {user, activeOrg, organizations}}
     {@const meta = activeOrg?.metadata ? JSON.parse(activeOrg.metadata) : {}}
-    <div class="flex min-h-screen">
-        <aside class="w-56 bg-base-200 border-r border-base-100 flex flex-col shrink-0">
+    <!-- Sidebar below lg is a drawer behind a menu button -->
+    <div class="drawer lg:drawer-open">
+        <input id="nav-drawer" type="checkbox" class="drawer-toggle" bind:checked={navOpen}/>
+
+        <div class="drawer-content flex flex-col min-h-screen bg-base-200 min-w-0">
+            <header class="navbar bg-base-100 border-b border-base-200 lg:hidden">
+                <label for="nav-drawer" class="btn btn-square btn-ghost" aria-label="Åpne meny">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </label>
+                <span class="font-bold text-primary truncate">{activeOrg?.name ?? 'Xcello Sameie'}</span>
+            </header>
+            {@render children()}
+        </div>
+
+        <div class="drawer-side z-40">
+        <label for="nav-drawer" class="drawer-overlay" aria-label="Lukk meny"></label>
+        <aside class="w-56 min-h-full bg-base-200 border-r border-base-100 flex flex-col">
 
             <!-- App name -->
             <div class="px-6 pt-6 pb-4 border-b border-base-100">
@@ -47,6 +68,7 @@
                     <select
                             value={activeOrg?.id ?? ''}
                             onchange={(e) => switchOrg(e.currentTarget.value)}
+                            aria-label="Aktivt sameie"
                             class="select select-bordered select-sm font-semibold w-full"
                     >
                         {#each organizations as org}
@@ -181,9 +203,6 @@
             </div>
 
         </aside>
-
-        <div class="flex-1 flex flex-col bg-base-200">
-            {@render children()}
         </div>
     </div>
 {:catch err}

@@ -98,6 +98,7 @@
                                         name="payment-responsible"
                                         checked={ownership.isPaymentResponsible}
                                         onchange={() => set_payment_responsible({ flatNo, ownerId: owner.id }).updates(data)}
+                                        aria-label="{owner.name} er betalingsansvarlig"
                                     />
                                 {/if}
                                 <div class="flex flex-col gap-0.5">
@@ -214,6 +215,7 @@
                 <div class="card-body">
                     <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-3">
                         Husleiehistorikk</p>
+                    <div class="overflow-x-auto">
                     <table class="table table-sm">
                         <thead>
                         <tr>
@@ -238,6 +240,7 @@
                         {/each}
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         {/if}

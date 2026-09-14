@@ -60,6 +60,7 @@
 				{#if rules.length === 0}
 					<p class="text-sm text-base-content/40 py-4 text-center">Ingen regler er definert ennå.</p>
 				{:else}
+					<div class="overflow-x-auto">
 					<table class="table table-sm">
 						<thead>
 							<tr>
@@ -96,6 +97,7 @@
 							{/each}
 						</tbody>
 					</table>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -108,9 +110,10 @@
 					<input
 						class="input input-bordered input-sm flex-1 min-w-40"
 						placeholder="Mønster (f.eks. «Ola Nordmann»)"
+						aria-label="Mønster"
 						bind:value={newPattern}
 					/>
-					<select class="select select-bordered select-sm flex-1 min-w-40" bind:value={newTarget}>
+					<select class="select select-bordered select-sm flex-1 min-w-40" aria-label="Kobles til" bind:value={newTarget}>
 						<option value="">Kobles til...</option>
 						{#if owners.length > 0}
 							<optgroup label="Eiere">
@@ -132,6 +135,7 @@
 					<input
 						class="input input-bordered input-sm flex-1 min-w-40"
 						placeholder="Beskrivelse (valgfri, f.eks. «Strømregning»)"
+						aria-label="Beskrivelse"
 						bind:value={newUserDescription}
 					/>
 					<label class="flex items-center gap-2 cursor-pointer">

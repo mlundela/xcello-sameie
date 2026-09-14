@@ -225,6 +225,7 @@
 								<input
 									type="text"
 									bind:value={orgNo}
+									aria-label="Organisasjonsnummer"
 									placeholder="123 456 789"
 									class="input input-bordered join-item flex-1"
 								/>
@@ -409,6 +410,7 @@
 											type="text"
 											inputmode="decimal"
 											bind:value={ownerBalanceKr[o.ownerId]}
+											aria-label="Inngående saldo for {o.ownerName}"
 											placeholder="0,00"
 											class="input input-bordered input-sm w-28 text-right tabular-nums"
 										/>
@@ -450,7 +452,7 @@
 								<input type="checkbox" bind:checked={autoFill} class="checkbox checkbox-sm" />
 								Fyll ut øvrige husleier automatisk basert på sameiebrøk
 							</label>
-							<table class="table table-sm">
+							<div class="overflow-x-auto"><table class="table table-sm">
 								<thead>
 									<tr>
 										<th>Nr.</th>
@@ -470,6 +472,7 @@
 													type="number"
 													bind:value={amounts[f.id]}
 													onblur={() => fillFromShare(f.id)}
+													aria-label="Husleie for {f.flatNo}"
 													min="1"
 													step="1"
 													placeholder="0"
@@ -479,7 +482,7 @@
 										</tr>
 									{/each}
 								</tbody>
-							</table>
+							</table></div>
 
 							{#if submitError}
 								<div role="alert" class="alert alert-error alert-soft">

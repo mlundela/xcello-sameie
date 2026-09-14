@@ -113,7 +113,7 @@
 							Fyll ut automatisk basert på sameiebrøk
 						</label>
 
-						<table class="table table-sm mb-4">
+						<div class="overflow-x-auto mb-4"><table class="table table-sm">
 							<thead>
 								<tr>
 									<th>Nr.</th>
@@ -141,6 +141,7 @@
 												type="number"
 												bind:value={amounts[f.id]}
 												onblur={() => fillFromShare(flats, f.id)}
+												aria-label="Ny husleie for {f.flatNo}"
 												min="1"
 												step="1"
 												placeholder="0"
@@ -150,7 +151,7 @@
 									</tr>
 								{/each}
 							</tbody>
-						</table>
+						</table></div>
 
 						{#if error}
 							<div role="alert" class="alert alert-error alert-soft mb-3">

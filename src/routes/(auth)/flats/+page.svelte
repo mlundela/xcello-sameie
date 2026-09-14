@@ -27,6 +27,7 @@
                 {#if items.length === 0}
                     <p class=" text-base-content/60">Ingen leiligheter registrert.</p>
                 {:else}
+                    <div class="overflow-x-auto">
                     <table class="table">
                         <thead>
                         <tr class="text-xs">
@@ -63,6 +64,7 @@
                         {/each}
                         </tbody>
                     </table>
+                    </div>
                 {/if}
             </div>
         </div>

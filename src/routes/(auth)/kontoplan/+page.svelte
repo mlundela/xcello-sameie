@@ -71,6 +71,7 @@
 				<div class="card bg-base-100">
 					<div class="card-body gap-3">
 						<h2 class="card-title text-base">{label}</h2>
+						<div class="overflow-x-auto">
 						<table class="table table-sm">
 							<thead>
 								<tr>
@@ -96,6 +97,7 @@
 								{/each}
 							</tbody>
 						</table>
+						</div>
 					</div>
 				</div>
 			{/if}
@@ -109,14 +111,16 @@
 					<input
 						class="input input-bordered input-sm w-24"
 						placeholder="Kode"
+						aria-label="Kontokode"
 						bind:value={newCode}
 					/>
 					<input
 						class="input input-bordered input-sm flex-1 min-w-40"
 						placeholder="Navn"
+						aria-label="Kontonavn"
 						bind:value={newName}
 					/>
-					<select class="select select-bordered select-sm" bind:value={newType}>
+					<select class="select select-bordered select-sm" aria-label="Kontotype" bind:value={newType}>
 						<option value="INCOME">Inntekt</option>
 						<option value="EXPENSE">Utgift</option>
 						<option value="LIABILITY">Gjeld</option>

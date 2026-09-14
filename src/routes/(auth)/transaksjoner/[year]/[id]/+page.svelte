@@ -128,6 +128,7 @@
 						<div class="flex gap-2">
 							<input
 								id="user-desc"
+								aria-label="Egen beskrivelse"
 								type="text"
 								class="input input-bordered input-sm flex-1"
 								bind:value={userDesc}
@@ -170,6 +171,7 @@
 						{isIncome}
 						{owners}
 						{accounts}
+						label="Kategoriser transaksjonen"
 						onpick={(k) => (k.kind === 'owner' ? match_transaction({ transactionId: id, ownerId: k.ownerId }) : categorize_transaction({ transactionId: id, ledgerAccountId: k.ledgerAccountId })).updates(txQuery)}
 					/>
 				{:else}

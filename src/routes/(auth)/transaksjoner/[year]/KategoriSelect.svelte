@@ -13,6 +13,7 @@
 		owners,
 		accounts,
 		placeholder = 'Velg...',
+		label = 'Kategori',
 		class: size = 'select-sm',
 		onpick
 	}: {
@@ -20,6 +21,7 @@
 		owners: Owner[];
 		accounts: Account[];
 		placeholder?: string;
+		label?: string;
 		class?: string;
 		onpick: (kategori: Kategori) => void;
 	} = $props();
@@ -53,7 +55,7 @@
 	}
 </script>
 
-<select class="select select-bordered {size}" {onchange}>
+<select class="select select-bordered {size}" aria-label={label} {onchange}>
 	<option value="">{placeholder}</option>
 	{#each groups as group (group.label)}
 		{#if group.options.length > 0}
