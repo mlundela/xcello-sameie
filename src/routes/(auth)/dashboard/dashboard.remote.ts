@@ -3,7 +3,7 @@ import * as v from 'valibot';
 import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { requireOrgId } from '$lib/server/tenant';
-import { ownerLedger } from '$lib/server/balances';
+import { ownerLedger, syncOpeningBalances } from '$lib/server/balances';
 import { accountingPeriod, owner } from '$lib/schema';
 
 export const get_dashboard_data = query(
@@ -21,6 +21,7 @@ export const get_dashboard_data = query(
 			periods.find((p) => p.year === year) ?? periods.find((p) => p.status === 'OPEN') ?? periods.at(-1) ?? null;
 		if (!period) return { periods, period: null, rows: [] };
 
+		await syncOpeningBalances(orgId);
 		// Same figures as the balance report, so the two can't disagree
 		const { ownerships, owners } = await ownerLedger(orgId, period.year);
 

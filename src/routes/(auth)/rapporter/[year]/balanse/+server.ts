@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/server/db';
 import { formatKr } from '$lib/money';
 import { requireOrgId } from '$lib/server/tenant';
-import { balanceSheet } from '$lib/server/balances';
+import { balanceSheet, syncOpeningBalances } from '$lib/server/balances';
 import { organization, voucher } from '$lib/schema';
 import { eq, and } from 'drizzle-orm';
 import { createRequire } from 'module';
@@ -35,6 +35,8 @@ export const GET: RequestHandler = async ({ params }) => {
 	if (isNaN(year)) throw error(400, 'Ugyldig år');
 
 	const [org] = await db.select({ name: organization.name }).from(organization).where(eq(organization.id, orgId));
+
+	await syncOpeningBalances(orgId);
 
 	// Require opening balance voucher
 	const [openingVoucher] = await db

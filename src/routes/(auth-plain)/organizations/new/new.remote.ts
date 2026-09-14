@@ -8,6 +8,7 @@ import { setRentFrom } from '$lib/server/rent';
 import { and, eq, isNull } from 'drizzle-orm';
 import { generateId } from 'better-auth';
 import { createOpeningVoucher } from '$lib/server/voucher';
+import { syncOpeningBalances } from '$lib/server/balances';
 
 export const get_setup_flats = query(async () => {
 	const orgId = requireOrgId();
@@ -63,6 +64,8 @@ export const setup_accounting_periods = command(
 			await tx.insert(accountingPeriod).values(rows).onConflictDoNothing();
 			await createOpeningVoucher(tx, { organizationId: orgId, year: startYear, bankOre, loanOre, ownerBalances });
 		});
+		// The later years opened here start from the year before's closing balances
+		await syncOpeningBalances(orgId);
 	}
 );
 

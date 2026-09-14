@@ -5,7 +5,7 @@ import { assertInOrg, requireAdmin, requireOrgId } from '$lib/server/tenant';
 import { accountingPeriod, owner, flatOwnership, flat } from '$lib/schema';
 import { eq, and, isNull, or, gte, desc, inArray } from 'drizzle-orm';
 import { createOpeningVoucher, readOpeningState } from '$lib/server/voucher';
-import { closingBalances } from '$lib/server/balances';
+import { syncOpeningBalances } from '$lib/server/balances';
 import { error } from '@sveltejs/kit';
 import { generateId } from 'better-auth';
 
@@ -13,6 +13,8 @@ import { generateId } from 'better-auth';
 // opening balance before the first CSV import.
 export const get_rapport_years = query(async () => {
 	const orgId = requireOrgId();
+	// The page reads each year's opening balances next; bring them up to date first
+	await syncOpeningBalances(orgId);
 	const rows = await db
 		.select({ year: accountingPeriod.year })
 		.from(accountingPeriod)
@@ -31,6 +33,22 @@ export const get_opening_balance = query(
 	}
 );
 
+/** Only a sameie's first year has opening balances of its own; later years follow the year before. */
+async function assertFirstYear(orgId: string, year: number) {
+	const [previous] = await db
+		.select({ year: accountingPeriod.year })
+		.from(accountingPeriod)
+		.where(and(eq(accountingPeriod.organizationId, orgId), eq(accountingPeriod.year, year - 1)));
+	if (previous) error(409, `Inngående saldo for ${year} hentes automatisk fra utgående saldo ${year - 1}`);
+}
+
+/** After the first year's opening balances change, every later year's do too. */
+async function syncAndRefreshAllYears(orgId: string) {
+	await syncOpeningBalances(orgId);
+	const years = await db.select({ year: accountingPeriod.year }).from(accountingPeriod).where(eq(accountingPeriod.organizationId, orgId));
+	await Promise.all(years.flatMap(({ year }) => [get_opening_balance({ year }).refresh(), get_owner_opening_balances({ year }).refresh()]));
+}
+
 export const set_opening_balance = command(
 	v.object({
 		year: v.pipe(v.number(), v.integer()),
@@ -39,6 +57,7 @@ export const set_opening_balance = command(
 	}),
 	async ({ year, bankOre, loanOre }) => {
 		const orgId = requireAdmin();
+		await assertFirstYear(orgId, year);
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);
 			await createOpeningVoucher(tx, {
@@ -49,7 +68,7 @@ export const set_opening_balance = command(
 				ownerBalances: current?.ownerBalances ?? []
 			});
 		});
-		await get_opening_balance({ year }).refresh();
+		await syncAndRefreshAllYears(orgId);
 	}
 );
 
@@ -113,6 +132,7 @@ export const set_owner_opening_balance = command(
 	async ({ year, ownerId, balanceOre }) => {
 		const orgId = requireAdmin();
 		await assertInOrg(owner, [ownerId], orgId);
+		await assertFirstYear(orgId, year);
 		await db.transaction(async (tx) => {
 			const current = await readOpeningState(tx, orgId, year);
 			const ownerBalances = (current?.ownerBalances ?? []).filter((o) => o.ownerId !== ownerId);
@@ -125,14 +145,14 @@ export const set_owner_opening_balance = command(
 				ownerBalances
 			});
 		});
-		await get_owner_opening_balances({ year }).refresh();
+		await syncAndRefreshAllYears(orgId);
 	}
 );
 
 /**
- * Starts the year after the latest accounting period, with an OPENING voucher carried forward
- * from that year's closing balances. Only one year ahead of the calendar, so January's
- * statement can be imported before anything else happens.
+ * Starts the year after the latest accounting period; its opening balances follow that year's
+ * closing balances from then on. Only one year ahead of the calendar, so January's statement
+ * can be imported before anything else happens.
  */
 export const open_next_year = command(v.object({}), async () => {
 	const orgId = requireAdmin();
@@ -146,33 +166,13 @@ export const open_next_year = command(v.object({}), async () => {
 	const year = latest.year + 1;
 	if (year > new Date().getFullYear() + 1) error(409, `Regnskapsår ${year} kan ikke startes før ${year - 1}`);
 
-	const closing = await closingBalances(orgId, latest.year);
-	await db.transaction(async (tx) => {
-		const created = await tx
-			.insert(accountingPeriod)
-			.values({ id: generateId(), organizationId: orgId, year, status: 'OPEN' })
-			.onConflictDoNothing()
-			.returning({ id: accountingPeriod.id });
-		if (created.length === 0) error(409, `Regnskapsår ${year} finnes allerede`);
-		await createOpeningVoucher(tx, { organizationId: orgId, year, ...closing });
-	});
+	const created = await db
+		.insert(accountingPeriod)
+		.values({ id: generateId(), organizationId: orgId, year, status: 'OPEN' })
+		.onConflictDoNothing()
+		.returning({ id: accountingPeriod.id });
+	if (created.length === 0) error(409, `Regnskapsår ${year} finnes allerede`);
+	await syncOpeningBalances(orgId);
 	await requested(get_rapport_years, 5).refreshAll();
 	return { year };
 });
-
-/** Replaces a year's opening balances with the previous year's closing balances. */
-export const carry_forward_opening_balance = command(
-	v.object({ year: v.pipe(v.number(), v.integer()) }),
-	async ({ year }) => {
-		const orgId = requireAdmin();
-		const periods = await db
-			.select({ year: accountingPeriod.year })
-			.from(accountingPeriod)
-			.where(and(eq(accountingPeriod.organizationId, orgId), or(eq(accountingPeriod.year, year), eq(accountingPeriod.year, year - 1))));
-		if (periods.length < 2) error(409, `Både ${year - 1} og ${year} må være regnskapsperioder`);
-
-		const closing = await closingBalances(orgId, year - 1);
-		await db.transaction((tx) => createOpeningVoucher(tx, { organizationId: orgId, year, ...closing }));
-		await Promise.all([requested(get_opening_balance, 5).refreshAll(), requested(get_owner_opening_balances, 5).refreshAll()]);
-	}
-);

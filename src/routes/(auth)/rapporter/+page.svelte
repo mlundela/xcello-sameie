@@ -8,8 +8,7 @@
 		set_opening_balance,
 		get_owner_opening_balances,
 		set_owner_opening_balance,
-		open_next_year,
-		carry_forward_opening_balance
+		open_next_year
 	} from './rapporter.remote';
 
 	const years = get_rapport_years();
@@ -41,6 +40,9 @@
 				{#each list as year}
 					{@const obQuery = get_opening_balance({ year })}
 					{@const ownerBalQuery = get_owner_opening_balances({ year })}
+					<!-- Only the first year has opening balances of its own; later years follow the year before -->
+					{@const carried = list.includes(year - 1)}
+					{@const editable = page.data.canEdit && !carried}
 					<div class="card bg-base-100">
 						<div class="card-body gap-4">
 							<h2 class="card-title">{year}</h2>
@@ -76,14 +78,8 @@
 
 							<div class="flex items-center justify-between gap-2">
 								<p class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Inngående saldo 1. jan {year}</p>
-								{#if page.data.canEdit && list.includes(year - 1)}
-									<button
-										class="btn btn-ghost btn-xs"
-										onclick={() => {
-											if (confirm(`Erstatte inngående saldo for ${year} med utgående saldo fra ${year - 1}?`))
-												carry_forward_opening_balance({ year }).updates(obQuery, ownerBalQuery);
-										}}
-									>Hent fra {year - 1}</button>
+								{#if carried}
+									<span class="text-xs text-base-content/50">Utgående saldo {year - 1}, oppdateres automatisk</span>
 								{/if}
 							</div>
 
@@ -106,7 +102,7 @@
 										<span class="text-xs text-base-content/60">1920 Bankkonto (kr)</span>
 										<input
 											name="bank"
-											disabled={!page.data.canEdit}
+											disabled={!editable}
 											type="text"
 											inputmode="decimal"
 											class="input input-bordered input-sm"
@@ -118,7 +114,7 @@
 										<span class="text-xs text-base-content/60">2400 Langsiktig gjeld (kr)</span>
 										<input
 											name="loan"
-											disabled={!page.data.canEdit}
+											disabled={!editable}
 											type="text"
 											inputmode="decimal"
 											class="input input-bordered input-sm"
@@ -126,7 +122,7 @@
 											placeholder="0,00"
 										/>
 									</label>
-									{#if page.data.canEdit}
+									{#if editable}
 										<div class="col-span-2">
 											<button type="submit" class="btn btn-primary btn-sm">Lagre</button>
 										</div>
@@ -149,7 +145,7 @@
 													type="text"
 													inputmode="decimal"
 													class="input input-bordered input-xs w-28 text-right font-mono"
-													disabled={!page.data.canEdit}
+													disabled={!editable}
 													value={oreToKr(o.balanceOre)}
 													aria-label="Inngående saldo for {o.ownerName}"
 													placeholder="0,00"

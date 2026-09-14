@@ -1,8 +1,9 @@
-import { and, eq, inArray, isNotNull, sql, sum } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, sql, sum } from 'drizzle-orm';
 import { db } from './db';
 import { expectedRentByOwner } from './rent';
 import { inYear } from './period';
-import { bankTransaction, ledgerAccount, voucher, voucherLine } from '$lib/schema';
+import { createOpeningVoucher } from './voucher';
+import { accountingPeriod, bankTransaction, ledgerAccount, voucher, voucherLine } from '$lib/schema';
 
 const ore = (value: string | null | undefined) => parseInt(value ?? '0');
 
@@ -84,6 +85,25 @@ export async function closingBalances(organizationId: string, year: number) {
 		loanOre: -ore(loan?.net),
 		ownerBalances: owners.map(({ ownerId, balanceOre }) => ({ ownerId, balanceOre }))
 	};
+}
+
+/**
+ * Keeps every OPEN year's opening balances equal to the previous year's closing balances, oldest year
+ * first so each year starts from an up-to-date predecessor. A sameie's first year has no predecessor
+ * and keeps the balances entered at onboarding. createOpeningVoucher posts a correction only when
+ * something changed, so this is cheap enough to call before showing opening-derived figures.
+ */
+export async function syncOpeningBalances(organizationId: string) {
+	const periods = await db
+		.select({ year: accountingPeriod.year, status: accountingPeriod.status })
+		.from(accountingPeriod)
+		.where(eq(accountingPeriod.organizationId, organizationId))
+		.orderBy(asc(accountingPeriod.year));
+	for (const { year, status } of periods) {
+		if (status !== 'OPEN' || !periods.some((p) => p.year === year - 1)) continue;
+		const closing = await closingBalances(organizationId, year - 1);
+		await db.transaction((tx) => createOpeningVoucher(tx, { organizationId, year, ...closing }));
+	}
 }
 
 type ReportLine = { code: string; name: string; amountOre: number };

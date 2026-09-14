@@ -9,7 +9,7 @@ import * as s from '$lib/schema';
 import { DEFAULT_ACCOUNTS } from '$lib/server/default-accounts';
 import { createBankAutoVoucher, createBankAutoVouchers, createOpeningVoucher, readOpeningState, reverseBankAutoVoucher } from '$lib/server/voucher';
 import { expectedRentByOwner, setRentFrom } from '$lib/server/rent';
-import { ownerLedger } from '$lib/server/balances';
+import { ownerLedger, syncOpeningBalances } from '$lib/server/balances';
 import { landingMembership } from '$lib/server/membership';
 
 const createdOrgs: string[] = [];
@@ -197,6 +197,37 @@ describe('corrections keep posted vouchers', () => {
 		expect(await netOn(t.orgId, '6600')).toBe(5000);
 		expect(await netOn(t.orgId, '1920')).toBe(-5000);
 		expect((await unbalanced(t.orgId)).length).toBe(0);
+	});
+});
+
+describe('syncOpeningBalances', () => {
+	test("an open year starts from the previous year's closing balances and follows later changes", async () => {
+		const t = await testSameie();
+		for (const year of [2025, 2026]) await db.insert(s.accountingPeriod).values({ id: generateId(), organizationId: t.orgId, year, status: 'OPEN' });
+		await db.transaction((tx) => createOpeningVoucher(tx, { organizationId: t.orgId, year: 2025, bankOre: 100000, loanOre: 400000, ownerBalances: [] }));
+		const statementId = generateId();
+		await db.insert(s.bankStatement).values({ id: statementId, organizationId: t.orgId, fileName: 'test.csv', content: '', importedAt: new Date(), rowCount: 0 });
+		const pay = async (date: string, amountOre: number, code: string) => {
+			const id = generateId();
+			await db.insert(s.bankTransaction).values({ id, organizationId: t.orgId, bankStatementId: statementId, date, description: 'Test', amountOre, status: 'CATEGORIZED' });
+			await db.transaction((tx) => createBankAutoVoucher(tx, { organizationId: t.orgId, bankTransactionId: id, date, amountOre, counterAccountId: t.account(code), description: 'Test' }));
+		};
+		const openingVouchers2026 = async () =>
+			(await db.select({ id: s.voucher.id }).from(s.voucher).where(and(eq(s.voucher.organizationId, t.orgId), eq(s.voucher.fiscalYear, 2026), eq(s.voucher.source, 'OPENING')))).length;
+
+		// Like onboarding with an earlier start year: 2026 is open but has no opening balances yet
+		await syncOpeningBalances(t.orgId);
+		expect(await readOpeningState(db, t.orgId, 2026)).toMatchObject({ bankOre: 100000, loanOre: 400000 });
+
+		// A late 2025 invoice and a loan instalment; two syncs at once must post one correction
+		await pay('2025-12-20', -30000, '6600');
+		await pay('2025-12-28', -50000, '2400');
+		await Promise.all([syncOpeningBalances(t.orgId), syncOpeningBalances(t.orgId)]);
+		expect(await readOpeningState(db, t.orgId, 2026)).toMatchObject({ bankOre: 20000, loanOre: 350000 });
+		expect(await openingVouchers2026()).toBe(2);
+
+		await syncOpeningBalances(t.orgId);
+		expect(await openingVouchers2026()).toBe(2);
 	});
 });
 

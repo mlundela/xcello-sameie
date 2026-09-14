@@ -21,13 +21,18 @@ async function getBankAccountId(tx: DbOrTx, organizationId: string): Promise<str
 	return getAccountIdByCode(tx, organizationId, '1920');
 }
 
+/** Serialises voucher writes for one (org, fiscal year) until the transaction ends. Re-entrant. */
+function lockYear(tx: Tx, organizationId: string, fiscalYear: number) {
+	return tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}::text), ${fiscalYear}::int)`);
+}
+
 /**
  * First free voucher number in a fiscal year. The advisory lock serialises numbering per (org, year)
  * until the transaction ends; without it two concurrent imports read the same MAX and one of them
  * fails on voucher_org_year_number_idx. The caller may use consecutive numbers from the result.
  */
 async function reserveVoucherNumbers(tx: Tx, organizationId: string, fiscalYear: number): Promise<number> {
-	await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${organizationId}::text), ${fiscalYear}::int)`);
+	await lockYear(tx, organizationId, fiscalYear);
 	const [row] = await tx
 		.select({ max: sql<number | null>`MAX(${voucher.voucherNumber})` })
 		.from(voucher)
@@ -190,6 +195,8 @@ function openingPostings(acc: OpeningAccounts, state: OpeningState): Posting[] {
  */
 export async function createOpeningVoucher(tx: Tx, opts: { organizationId: string; year: number } & OpeningState): Promise<void> {
 	const { organizationId, year } = opts;
+	// Before reading the current state: two concurrent calls would otherwise both post the same correction
+	await lockYear(tx, organizationId, year);
 	const [previous] = await tx
 		.select({ id: voucher.id })
 		.from(voucher)
