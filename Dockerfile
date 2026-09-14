@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1
 
+# Same bun as packageManager in package.json, which CI installs
 FROM oven/bun:1.4.2 AS bun
 
 # Node runs Vite and the server; bun is only the package manager.

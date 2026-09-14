@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-Package manager is **bun** (`packageManager: bun@1.2.9`).
+Package manager is **bun** (`packageManager: bun@1.4.2`). CI installs that version; bump the Dockerfile's `oven/bun` tag with it.
 
 ```bash
 docker compose up -d db          # Postgres 17 on :5432 (xcello/xcello/xcello)

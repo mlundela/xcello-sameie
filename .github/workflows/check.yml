@@ -31,10 +31,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Without an input setup-bun installs the latest bun, not the one the lockfile and image use
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
 
       - run: bun install --frozen-lockfile
 
       - run: bun run check
 
       - run: bun run test
+
+      # The production build the Docker image runs; needs no env (see `building` in $lib/server)
+      - run: bun run build
