@@ -1,71 +1,55 @@
 import { query } from '$app/server';
+import * as v from 'valibot';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { db } from '$lib/server/db';
 import { requireOrgId } from '$lib/server/tenant';
-import { expectedRentByOwner } from '$lib/server/rent';
-import { inYear } from '$lib/server/period';
-import { accountingPeriod, bankTransaction } from '$lib/schema';
-import { eq, and, sum, inArray } from 'drizzle-orm';
+import { ownerLedger } from '$lib/server/balances';
+import { accountingPeriod, owner } from '$lib/schema';
 
-export const get_dashboard_data = query(async () => {
-	const orgId = requireOrgId();
+export const get_dashboard_data = query(
+	v.object({ year: v.optional(v.pipe(v.number(), v.integer())) }),
+	async ({ year }) => {
+		const orgId = requireOrgId();
 
-	// Oldest OPEN period
-	const [period] = await db
-		.select()
-		.from(accountingPeriod)
-		.where(and(eq(accountingPeriod.organizationId, orgId), eq(accountingPeriod.status, 'OPEN')))
-		.orderBy(accountingPeriod.year)
-		.limit(1);
+		const periods = await db
+			.select({ year: accountingPeriod.year, status: accountingPeriod.status })
+			.from(accountingPeriod)
+			.where(eq(accountingPeriod.organizationId, orgId))
+			.orderBy(asc(accountingPeriod.year));
+		// Default: the oldest open period, the one still being worked on (as on /transaksjoner)
+		const period =
+			periods.find((p) => p.year === year) ?? periods.find((p) => p.status === 'OPEN') ?? periods.at(-1) ?? null;
+		if (!period) return { periods, period: null, rows: [] };
 
-	if (!period) return { period: null, rows: [] };
+		// Same figures as the balance report, so the two can't disagree
+		const { ownerships, owners } = await ownerLedger(orgId, period.year);
 
-	const { ownerships, expected } = await expectedRentByOwner(orgId, period.year);
-	if (ownerships.length === 0) return { period, rows: [] };
-
-	// Sum of MATCHED transactions per owner for the period year
-	const paymentRows = await db
-		.select({
-			matchedOwnerId: bankTransaction.matchedOwnerId,
-			total: sum(bankTransaction.amountOre)
-		})
-		.from(bankTransaction)
-		.where(
-			and(
-				eq(bankTransaction.organizationId, orgId),
-				eq(bankTransaction.status, 'MATCHED'),
-				inYear(bankTransaction.date, period.year),
-				inArray(bankTransaction.matchedOwnerId, [...expected.keys()])
-			)
-		)
-		.groupBy(bankTransaction.matchedOwnerId);
-
-	const payments = new Map(paymentRows.map((r) => [r.matchedOwnerId, Number(r.total ?? 0)]));
-
-	// One row per payment-responsible owner, ordered by their lowest section number
-	const owners = new Map<string, { ownerName: string; flatNos: string[]; minNummer: number }>();
-	for (const o of ownerships) {
-		const row = owners.get(o.ownerId);
-		if (!row) owners.set(o.ownerId, { ownerName: o.ownerName, flatNos: [o.flatNo], minNummer: o.nummer });
-		else {
-			if (!row.flatNos.includes(o.flatNo)) row.flatNos.push(o.flatNo);
-			row.minNummer = Math.min(row.minNummer, o.nummer);
+		const info = new Map<string, { ownerName: string; flatNos: string[]; minNummer: number }>();
+		for (const o of ownerships) {
+			const row = info.get(o.ownerId);
+			if (!row) info.set(o.ownerId, { ownerName: o.ownerName, flatNos: [o.flatNo], minNummer: o.nummer });
+			else {
+				if (!row.flatNos.includes(o.flatNo)) row.flatNos.push(o.flatNo);
+				row.minNummer = Math.min(row.minNummer, o.nummer);
+			}
 		}
+
+		// Former owners who still have a balance this year (e.g. a seller who left with arrears)
+		const formerIds = owners.filter((o) => !info.has(o.ownerId) && o.balanceOre !== 0).map((o) => o.ownerId);
+		if (formerIds.length > 0) {
+			const former = await db
+				.select({ id: owner.id, name: owner.name })
+				.from(owner)
+				.where(and(eq(owner.organizationId, orgId), inArray(owner.id, formerIds)));
+			for (const o of former) info.set(o.id, { ownerName: o.name, flatNos: [], minNummer: Number.MAX_SAFE_INTEGER });
+		}
+
+		const rows = owners
+			.filter((o) => info.has(o.ownerId))
+			.map((o) => ({ ...o, ...info.get(o.ownerId)! }))
+			.sort((a, b) => a.minNummer - b.minNummer)
+			.map(({ minNummer, ...row }) => row);
+
+		return { periods, period, rows };
 	}
-
-	const rows = [...owners.entries()]
-		.sort(([, a], [, b]) => a.minNummer - b.minNummer)
-		.map(([ownerId, o]) => {
-			const expectedOre = expected.get(ownerId) ?? 0;
-			const actualOre = payments.get(ownerId) ?? 0;
-			return {
-				ownerId,
-				ownerName: o.ownerName,
-				flatNos: o.flatNos,
-				expectedOre,
-				actualOre,
-				balanceOre: actualOre - expectedOre
-			};
-		});
-
-	return { period, rows };
-});
+);
