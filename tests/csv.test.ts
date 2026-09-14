@@ -1,38 +1,70 @@
-// The four bank formats import_csv accepts, parsed from the real sample exports in the repo.
+// The four bank formats import_csv accepts. The real exports in csv/ and spv-*.csv are gitignored
+// (they hold people's names and account numbers), so these are made-up files with the same layout.
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
 import { decodeBuffer, detectAndParse } from '$lib/server/csv';
 
-const parse = (file: string) => detectAndParse(decodeBuffer(readFileSync(file)));
+const parse = (text: string) => detectAndParse(decodeBuffer(Buffer.from(text)));
 
-// rows, incoming, outgoing, sum of amounts (øre), first row
-const samples: [file: string, rows: number, incoming: number, sumOre: number, first: { date: string; description: string; amountOre: number }][] = [
-	['csv/bn.csv', 44, 34, 1061431, { date: '2025-01-30', description: 'FILIAL AF BANKING CIRCLE', amountOre: 4100232 }],
-	['csv/dnb.csv', 84, 41, 2065341, { date: '2025-04-01', description: 'Turid Elisabeth Hansen', amountOre: 875800 }],
-	['csv/sp1.csv', 303, 52, -1018727, { date: '2024-12-31', description: 'MOBILGIRO M/KID FORF. I DAG 1 TRANS(ER) TYPE 261', amountOre: -300 }],
-	['csv/spv.csv', 49, 35, 444250, { date: '2025-10-28', description: 'Polisenummer_SP0000609890', amountOre: -1833500 }],
-	['spv-1.csv', 6, 3, -1112800, expect.objectContaining({ date: '2025-01-31', amountOre: -300 })],
-	['spv-2.csv', 11, 7, 1356700, expect.objectContaining({ date: '2025-02-17', amountOre: 1800000 })],
-	['spv-3.csv', 14, 10, 2026700, expect.objectContaining({ date: '2025-03-03', amountOre: 210000 })]
-];
+// BN Bank: ';' with padded fields, "Beløp inn"/"Beløp ut" in columns 10/11, ø garbled to U+FFFD in the header
+const bn = [
+	'Utf�rt dato ; Bokf�rt dato; Rentedato ; Beskrivelse ; Type ; Undertype ; Fra konto ; Avsender ; Til konto ; Mottakernavn ; Bel�p inn; Bel�p ut; Valuta; Status ; Numref ; Arkivref ; Melding/KID/Fakt.nr',
+	'30.01.2025 ; 30.01.2025 ; 30.01.2025 ; Kari Nordmann ; Betaling innland; Innlandsbetaling ; 1234 56 78901; Kari Nordmann ; 9876 54 32109; Sameiet ;  4100.32 ; ; NOK ; Bokført; 1 ; 2 ; ',
+	'31.01.2025 ; 31.01.2025 ; 31.01.2025 ; Hafslund Strøm ; Betaling innland; Innlandsbetaling ; 9876 54 32109; Sameiet ; 1111 22 33333; Hafslund ; ;  -850.50 ; NOK ; Bokført; 3 ; 4 ; '
+].join('\n');
+
+// DNB: four metadata lines, header on line 5, quoted, Norwegian amounts, Ut (column 5) is negative
+const dnb = [
+	'"Konto";"Kontonavn"',
+	'"1234.56.78901";"SAMEIET"',
+	'"Inngående saldo";"Utgående saldo";"Sum inn på konto";"Sum ut av konto"',
+	'"1.000,00";"8.258,00";"8.758,00";"-1.500,00"',
+	'"Bokført dato";"Forklarende tekst";"Status";"Transaksjonstype";"Rentedato";"Ut";"Inn";"Arkivref.";"Referanse"',
+	'"01.04.2025";"Ola Nordmann; H0101";"B";"Overføring innland";"01.04.2025";"";"8.758,00";"1";"2"',
+	'"02.04.2025";"Renhold AS";"B";"Giro";"02.04.2025";"-1.500,00";"";"3";"4"'
+].join('\r\n');
+
+// SpareBank 1: ',' with M/D/YYYY dates and plain amounts
+const sp1 = ['Dato,Beskrivelse,Rentedato,Inn,Ut,Til konto,Fra konto', '12/23/2024,Kari Nordmann,,2000,,12345678901,', '1/5/2025,GEBYR 1 TRANS(ER),,,-3,,12345678901'].join('\n');
+
+// Sparebanken Vest: UTF-8 BOM, ';' with padding, signed amount in column 6
+const spv = [
+	'﻿Bokført ; Rentedato ; Kategori ; Type ; Beskrivelse ; Melding ; Beløp (NOK); Beløp (valuta); Valuta; ',
+	'28.10.2025; 28.10.2025; AvtaleGiro ; AVTALEGIRO ; Forsikring Sameie ; ; -18335 ; -18335 ; NOK ; ',
+	'01.10.2025; 01.10.2025; Innbetaling; OVERFØRSEL ; Fra: Åse Øvrebø Betalt: 01.10.25 ; Felleskostnader ; 2500,50 ; 2500,50 ; NOK ; '
+].join('\n');
 
 describe('detectAndParse', () => {
-	for (const [file, rows, incoming, sumOre, first] of samples) {
-		test(`${file}: ${rows} rows with signed øre amounts`, () => {
-			const parsed = parse(file);
-			expect(parsed).toHaveLength(rows);
-			expect(parsed.filter((r) => r.amountOre > 0)).toHaveLength(incoming);
-			expect(parsed.reduce((s, r) => s + r.amountOre, 0)).toBe(sumOre);
-			expect(parsed[0]).toEqual(first);
-			for (const r of parsed) {
-				expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-				expect(Number.isInteger(r.amountOre)).toBe(true);
-			}
-		});
-	}
+	test('BN Bank', () => {
+		expect(parse(bn)).toEqual([
+			{ date: '2025-01-30', description: 'Kari Nordmann', amountOre: 410032 },
+			{ date: '2025-01-31', description: 'Hafslund Strøm', amountOre: -85050 }
+		]);
+	});
 
-	test('keeps Norwegian letters from Sparebanken Vest exports', () => {
-		expect(parse('csv/spv.csv').some((r) => /[æøå]/i.test(r.description))).toBe(true);
+	test('DNB, with a separator inside a quoted field and CRLF line endings', () => {
+		expect(parse(dnb)).toEqual([
+			{ date: '2025-04-01', description: 'Ola Nordmann; H0101', amountOre: 875800 },
+			{ date: '2025-04-02', description: 'Renhold AS', amountOre: -150000 }
+		]);
+	});
+
+	test('SpareBank 1', () => {
+		expect(parse(sp1)).toEqual([
+			{ date: '2024-12-23', description: 'Kari Nordmann', amountOre: 200000 },
+			{ date: '2025-01-05', description: 'GEBYR 1 TRANS(ER)', amountOre: -300 }
+		]);
+	});
+
+	test('Sparebanken Vest, keeping Norwegian letters', () => {
+		expect(parse(spv)).toEqual([
+			{ date: '2025-10-28', description: 'Forsikring Sameie', amountOre: -1833500 },
+			{ date: '2025-10-01', description: 'Fra: Åse Øvrebø Betalt: 01.10.25', amountOre: 250050 }
+		]);
+	});
+
+	test('a Windows-1252 export is decoded as latin1', () => {
+		const rows = detectAndParse(decodeBuffer(Buffer.from(spv.replace('﻿', ''), 'latin1')));
+		expect(rows[1].description).toBe('Fra: Åse Øvrebø Betalt: 01.10.25');
 	});
 
 	test('rejects an unknown format with a Norwegian 400', () => {
