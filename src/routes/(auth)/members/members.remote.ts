@@ -4,6 +4,7 @@ import * as v from 'valibot';
 import { auth } from '$lib/server/auth';
 import { requireAdmin, requireOrgId, requireSession } from '$lib/server/tenant';
 import { canEdit } from '$lib/roles';
+import { landingMembership } from '$lib/server/membership';
 
 function getSessionAndOrg() {
 	const session = requireSession();
@@ -105,9 +106,10 @@ export const leave_organization = command(v.object({}), async () => {
 		headers
 	});
 
-	const remaining = await auth.api.listOrganizations({ headers });
+	// The sameie chosen last, else the oldest membership left, as at sign-in
+	const next = await landingMembership(session.user.id);
 	await auth.api.setActiveOrganization({
-		body: { organizationId: remaining[0]?.id ?? null },
+		body: { organizationId: next?.organizationId ?? null },
 		headers
 	});
 });

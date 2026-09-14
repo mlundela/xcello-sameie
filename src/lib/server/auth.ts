@@ -73,8 +73,6 @@ export const auth = betterAuth({
         enabled: true,
         requireEmailVerification: true,
         sendResetPassword: async ({user, url}) => {
-            // Don't log `url`: it lets anyone set the password
-            console.log('Sending password reset email to', user.email);
             await sendPasswordResetEmail({to: user.email, url});
         },
         // A session someone else may have taken over ends when the password changes
@@ -82,8 +80,6 @@ export const auth = betterAuth({
     },
     emailVerification: {
         sendVerificationEmail: async ({user, url}: { user: { email: string }; url: string }) => {
-            // Don't log `url`: it signs the user in
-            console.log('Sending verification email to', user.email);
             await sendVerificationEmail({to: user.email, url});
         },
         autoSignInAfterVerification: true,

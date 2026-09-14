@@ -105,15 +105,6 @@ export const get_transaction = query(
 	}
 );
 
-export const get_statements = query(async () => {
-	const orgId = requireOrgId();
-	return db
-		.select()
-		.from(bankStatement)
-		.where(eq(bankStatement.organizationId, orgId))
-		.orderBy(bankStatement.importedAt);
-});
-
 // All periods, so closed years stay viewable; import_csv still requires an OPEN one
 export const get_periods = query(async () => {
 	const orgId = requireOrgId();
@@ -281,7 +272,7 @@ export const import_csv = command(
 			}
 		});
 
-		await Promise.all([get_statements().refresh(), refreshTransactions()]);
+		await refreshTransactions();
 
 		return { imported: toInsert.length, skipped: skippedCount };
 	}
