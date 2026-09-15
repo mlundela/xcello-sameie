@@ -36,7 +36,20 @@ Accounting + property management for Norwegian housing cooperatives (*sameier*).
 
 ## Architecture
 
-SvelteKit 2 / Svelte 5 (runes) · Drizzle ORM + postgres-js · better-auth 1.7 · Tailwind 4 + daisyUI 5 (`coffee` theme, 18px base) · pdfmake for reports · valibot for input schemas.
+SvelteKit 2 / Svelte 5 (runes) · Drizzle ORM + postgres-js · better-auth 1.7 · Tailwind 4 + daisyUI 5 (`coffee` theme, 16px base) · pdfmake for reports · valibot for input schemas.
+
+### UI typography and spacing
+One scale on every page; don't shrink with `-xs` variants to compensate.
+- Every page in `(auth)` opens with `PageHeader` (`$lib/PageHeader.svelte`): breadcrumbs from Hjem plus the page's only `h1`. The dashboard passes no `crumbs`; standalone pages (`(public)`, org setup) write their own `h1 class="text-2xl font-bold"`.
+- Card titles are `h2.card-title` at its default size. A labelled group inside a card is an `h3` with `text-sm font-semibold text-base-content/70`. No uppercase `tracking-wide` labels.
+- Tables are `table`, never `table-sm`. Field labels `text-sm font-medium`; a hint directly under a field `text-xs text-base-content/60`; secondary and explanatory text `text-base-content/70`; empty states `text-base-content/60`. No other opacities.
+- Controls are default size in forms and `-sm` in table rows, filter bars and row actions. No `-xs` controls; badges are `badge-sm`.
+- Amounts, dates and fractions get `tabular-nums`; codes and ids (account code, bruksenhet, pattern) get `font-mono`.
+- Success messages `role="status"`, errors `role="alert"`.
+- Spacing is `gap`, five steps with fixed meanings: `gap-1` a tight pair (label + field + hint, name + meta, `dt` + `dd`); `gap-2` items in one control group (buttons side by side, input + button, badge lists, rows of a list without dividers); `gap-3` fields or controls on one form row, a heading next to its badge or controls, text next to a control, `dl` grids (`gap-x-4 gap-y-3`), and a `<section>` group inside a card (`h3` first); `gap-4` stacked content, so every `card-body` is `gap-4` and stacked form fields are `gap-4`; `gap-6` cards and sections in `<main>`. Rows of a `divide-y` list are `py-3`, spinners `py-12`.
+- No margins for rhythm. Allowed: `ml-1` before an inline badge, `my-0` on a `divider` inside a gap box, `mt-0.5` to line a radio up with text.
+- A table in a card sits in `<div class="overflow-x-auto">` directly in `card-body`; `app.css` stretches it to the card's edges and lines its outer cells up with the card padding. A card holding only a table is `card-body py-2`. A cell holding a control (button, select, input) is `py-0`, so its row is as tall as a text row.
+- Every form field has a visible label (`<label class="flex flex-col gap-1">` with a `text-sm font-medium` span), never only a placeholder. A page-level action sits in the `PageHeader` row (`ml-auto`), not in a row of its own.
 
 ### Multi-tenancy runs through better-auth's organization plugin
 One `organization` = one sameie. There is no separate tenant table: `session.activeOrganizationId` **is** the tenant context, set in the `databaseHooks.session.create.before` hook in `src/lib/server/auth.ts` (first membership wins). Every domain table carries `organizationId` and every query must filter on it.

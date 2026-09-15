@@ -2,6 +2,7 @@
 	import { krToOre } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
+	import PageHeader from '$lib/PageHeader.svelte';
 	import {
 		get_rapport_years,
 		get_opening_balance,
@@ -18,11 +19,13 @@
 	}
 </script>
 
-<main class="max-w-2xl px-6 py-8 flex flex-col gap-6">
-	<h1 class="text-2xl font-bold">Rapporter</h1>
+<main class="max-w-2xl px-4 sm:px-6 py-8 flex flex-col gap-6">
+	<PageHeader crumbs={[]} title="Rapporter" />
 
 	{#await years}
-		<span class="loading loading-spinner"></span>
+		<div class="flex justify-center py-12">
+			<span class="loading loading-spinner loading-lg text-primary"></span>
+		</div>
 	{:then list}
 		{@const nextYear = (list[0] ?? 0) + 1}
 		{#if page.data.canEdit && list.length > 0 && nextYear <= new Date().getFullYear() + 1}
@@ -30,59 +33,59 @@
 				<button class="btn btn-primary btn-sm" onclick={() => open_next_year({}).updates(years)}>
 					Start regnskapsår {nextYear}
 				</button>
-				<span class="text-xs text-base-content/50">Inngående saldo hentes fra utgående saldo {nextYear - 1}.</span>
+				<span class="text-sm text-base-content/70">Inngående saldo hentes fra utgående saldo {nextYear - 1}.</span>
 			</div>
 		{/if}
 		{#if list.length === 0}
-			<p class="text-base-content/50">
+			<p class="text-base-content/60">
 				Ingen regnskapsperioder registrert ennå.
 				{#if page.data.canEdit}<a href="/organizations/new" class="link">Fullfør oppsettet</a> med første regnskapsår og inngående saldo.{/if}
 			</p>
 		{:else}
-			<div class="flex flex-col gap-8">
-				{#each list as year}
-					{@const obQuery = get_opening_balance({ year })}
-					{@const ownerBalQuery = get_owner_opening_balances({ year })}
-					<!-- Only the first year has opening balances of its own; later years follow the year before -->
-					{@const carried = list.includes(year - 1)}
-					{@const editable = page.data.canEdit && !carried}
-					<div class="card bg-base-100">
-						<div class="card-body gap-4">
-							<h2 class="card-title">{year}</h2>
+			{#each list as year}
+				{@const obQuery = get_opening_balance({ year })}
+				{@const ownerBalQuery = get_owner_opening_balances({ year })}
+				<!-- Only the first year has opening balances of its own; later years follow the year before -->
+				{@const carried = list.includes(year - 1)}
+				{@const editable = page.data.canEdit && !carried}
+				<div class="card bg-base-100">
+					<div class="card-body gap-4">
+						<h2 class="card-title">{year}</h2>
 
-							<div class="flex gap-2 flex-wrap">
+						<div class="flex gap-2 flex-wrap">
+							<a
+								href="/rapporter/{year}"
+								target="_blank"
+								class="btn btn-outline btn-sm gap-2"
+							>
+								<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+								</svg>
+								Resultatregnskap
+							</a>
+
+							{#await obQuery then ob}
 								<a
-									href="/rapporter/{year}"
+									href="/rapporter/{year}/balanse"
 									target="_blank"
 									class="btn btn-outline btn-sm gap-2"
+									class:btn-disabled={!ob}
 								>
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
 									</svg>
-									Resultatregnskap
+									Balanserapport
 								</a>
+							{/await}
+						</div>
 
-								{#await obQuery then ob}
-									<a
-										href="/rapporter/{year}/balanse"
-										target="_blank"
-										class="btn btn-outline btn-sm gap-2"
-										class:btn-disabled={!ob}
-									>
-										<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-										</svg>
-										Balanserapport
-									</a>
-								{/await}
-							</div>
+						<div class="divider my-0"></div>
 
-							<div class="divider my-0"></div>
-
-							<div class="flex items-center justify-between gap-2">
-								<p class="text-xs font-medium text-base-content/60 uppercase tracking-wide">Inngående saldo 1. jan {year}</p>
+						<section class="flex flex-col gap-3">
+							<div class="flex items-center justify-between gap-3 flex-wrap">
+								<h3 class="text-sm font-semibold text-base-content/70">Inngående saldo 1. jan {year}</h3>
 								{#if carried}
-									<span class="text-xs text-base-content/50">Utgående saldo {year - 1}, oppdateres automatisk</span>
+									<span class="text-base-content/60">Utgående saldo {year - 1}, oppdateres automatisk</span>
 								{/if}
 							</div>
 
@@ -102,52 +105,54 @@
 									}}
 								>
 									<label class="flex flex-col gap-1">
-										<span class="text-xs text-base-content/60">1920 Bankkonto (kr)</span>
+										<span class="text-sm font-medium">1920 Bankkonto (kr)</span>
 										<input
 											name="bank"
 											disabled={!editable}
 											type="text"
 											inputmode="decimal"
-											class="input input-bordered input-sm"
+											class="input input-bordered w-full tabular-nums"
 											value={bankVal}
 											placeholder="0,00"
 										/>
 									</label>
 									<label class="flex flex-col gap-1">
-										<span class="text-xs text-base-content/60">2400 Langsiktig gjeld (kr)</span>
+										<span class="text-sm font-medium">2400 Langsiktig gjeld (kr)</span>
 										<input
 											name="loan"
 											disabled={!editable}
 											type="text"
 											inputmode="decimal"
-											class="input input-bordered input-sm"
+											class="input input-bordered w-full tabular-nums"
 											value={loanVal}
 											placeholder="0,00"
 										/>
 									</label>
 									{#if editable}
 										<div class="col-span-2">
-											<button type="submit" class="btn btn-primary btn-sm">Lagre</button>
+											<button type="submit" class="btn btn-primary">Lagre</button>
 										</div>
 									{/if}
 								</form>
 							{/await}
+						</section>
 
-							{#await ownerBalQuery then owners}
-								{#if owners.length > 0}
-									<p class="text-xs font-medium text-base-content/60 uppercase tracking-wide mt-2">Eierbalanse 1. jan {year}</p>
-									<p class="text-xs text-base-content/50">Positiv = eier har til gode (forhåndsbetalt). Negativ = eier skylder (fordring).</p>
+						{#await ownerBalQuery then owners}
+							{#if owners.length > 0}
+								<section class="flex flex-col gap-3">
+									<h3 class="text-sm font-semibold text-base-content/70">Eierbalanse 1. jan {year}</h3>
+									<p class="text-base-content/70">Positiv = eier har til gode (forhåndsbetalt). Negativ = eier skylder (fordring).</p>
 									<div class="flex flex-col gap-2">
 										{#each owners as o}
 											<div class="flex items-center gap-3">
 												<div class="flex-1 min-w-0">
-													<p class="text-sm truncate">{o.ownerName}</p>
-													<p class="text-xs text-base-content/50">{o.flatNos.join(', ')}</p>
+													<p class="truncate">{o.ownerName}</p>
+													<p class="text-base-content/70">{o.flatNos.join(', ')}</p>
 												</div>
 												<input
 													type="text"
 													inputmode="decimal"
-													class="input input-bordered input-xs w-28 text-right font-mono"
+													class="input input-bordered input-sm w-28 text-right tabular-nums"
 													disabled={!editable}
 													value={oreToKr(o.balanceOre)}
 													aria-label="Inngående saldo for {o.ownerName}"
@@ -158,16 +163,16 @@
 															.updates(ownerBalQuery);
 													}}
 												/>
-												<span class="text-xs text-base-content/50 w-4">kr</span>
+												<span class="text-base-content/60 w-4">kr</span>
 											</div>
 										{/each}
 									</div>
-								{/if}
-							{/await}
-						</div>
+								</section>
+							{/if}
+						{/await}
 					</div>
-				{/each}
-			</div>
+				</div>
+			{/each}
 		{/if}
 	{:catch err}
 		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>

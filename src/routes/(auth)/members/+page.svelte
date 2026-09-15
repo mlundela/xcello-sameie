@@ -1,6 +1,7 @@
 <script lang="ts">
     import { errorMessage, showError } from '$lib/notify.svelte';
     import { roleLabel } from '$lib/roles';
+    import PageHeader from '$lib/PageHeader.svelte';
     import {goto, refreshAll} from '$app/navigation';
     import {cancel_invite, get_members_data, invite_member, leave_organization, remove_member, update_member_role} from './members.remote';
 
@@ -67,13 +68,8 @@
     }
 </script>
 
-<main class="max-w-lg px-6 py-8 flex flex-col gap-4">
-    <div class="breadcrumbs text-sm">
-        <ul>
-            <li><a href="/dashboard">Hjem</a></li>
-            <li>Brukere</li>
-        </ul>
-    </div>
+<main class="max-w-lg px-4 sm:px-6 py-8 flex flex-col gap-6">
+    <PageHeader crumbs={[]} title="Brukere"/>
     {#if leaveError}
         <div role="alert" class="alert alert-error">
             <span>{leaveError}</span>
@@ -85,20 +81,20 @@
             <span class="loading loading-spinner loading-lg text-primary"></span>
         </div>
     {:then {members, pendingInvites, isAdmin, currentUserId}}
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-                <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">Medlemmer</p>
+        <div class="card bg-base-100">
+            <div class="card-body gap-4">
+                <h2 class="card-title">Medlemmer</h2>
                 <ul class="flex flex-col divide-y divide-base-200">
                     {#each members as m (m.id)}
                         <li class="flex items-center justify-between py-3">
                             <div>
-                                <p class="font-medium text-sm">{m.name}</p>
-                                <p class="text-xs text-base-content/60">{m.email}</p>
+                                <p class="font-medium">{m.name}</p>
+                                <p class="text-base-content/70">{m.email}</p>
                             </div>
                             <div class="flex items-center gap-2">
                                 {#if isAdmin && m.userId !== currentUserId && m.role !== 'owner'}
                                     <select
-                                        class="select select-bordered select-xs"
+                                        class="select select-bordered select-sm w-auto"
                                         aria-label="Rolle for {m.name}"
                                         value={m.role}
                                         onchange={(e) => handleRoleChange(e.currentTarget, m.id, m.role)}
@@ -112,11 +108,11 @@
                                     </span>
                                 {/if}
                                 {#if m.userId === currentUserId}
-                                    <button onclick={handleLeave} class="btn btn-ghost btn-xs text-error">
+                                    <button onclick={handleLeave} class="btn btn-ghost btn-sm text-error">
                                         Forlat
                                     </button>
                                 {:else if isAdmin}
-                                    <button onclick={() => handleRemove(m.id)} class="btn btn-ghost btn-xs text-error">
+                                    <button onclick={() => handleRemove(m.id)} class="btn btn-ghost btn-sm text-error">
                                         Fjern
                                     </button>
                                 {/if}
@@ -129,23 +125,21 @@
 
         {#if isAdmin}
             {#if pendingInvites.length > 0}
-                <div class="card bg-base-100 shadow-sm">
-                    <div class="card-body">
-                        <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">
-                            Ventende invitasjoner
-                        </p>
+                <div class="card bg-base-100">
+                    <div class="card-body gap-4">
+                        <h2 class="card-title">Ventende invitasjoner</h2>
                         <ul class="flex flex-col divide-y divide-base-200">
                             {#each pendingInvites as inv (inv.id)}
                                 <li class="flex items-center justify-between py-3">
                                     <div>
-                                        <p class="font-medium text-sm">{inv.email}</p>
-                                        <p class="text-xs text-base-content/60">
+                                        <p class="font-medium">{inv.email}</p>
+                                        <p class="text-base-content/70">
                                             {roleLabel(inv.role ?? 'member')} ·
                                             utløper {new Date(inv.expiresAt).toLocaleDateString('nb-NO')}
                                         </p>
                                     </div>
                                     <button onclick={() => handleCancel(inv.id)}
-                                            class="btn btn-ghost btn-xs text-error">
+                                            class="btn btn-ghost btn-sm text-error">
                                         Trekk tilbake
                                     </button>
                                 </li>
@@ -155,12 +149,10 @@
                 </div>
             {/if}
 
-            <div class="card bg-base-100 shadow-sm">
-                <div class="card-body">
-                    <p class="text-xs font-medium text-base-content/50 uppercase tracking-wide mb-2">
-                        Inviter bruker
-                    </p>
-                    <form onsubmit={handleInvite} class="flex flex-col gap-3">
+            <div class="card bg-base-100">
+                <div class="card-body gap-4">
+                    <h2 class="card-title">Inviter bruker</h2>
+                    <form onsubmit={handleInvite} class="flex flex-col gap-4">
                         <label class="floating-label">
                             <input
                                     type="email"
@@ -184,7 +176,7 @@
                             </div>
                         {/if}
                         {#if inviteSuccess}
-                            <div role="alert" class="alert alert-success alert-soft">
+                            <div role="status" class="alert alert-success alert-soft">
                                 <span>Invitasjonen er sendt.</span>
                             </div>
                         {/if}

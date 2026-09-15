@@ -1,9 +1,16 @@
 @import "tailwindcss";
 
-html, body {
-  font-size: 18px;
-}
-
 @plugin "daisyui" {
   themes: coffee --default;
+}
+
+/* A table in a card spans its width; the outer cells line up with the card's padding */
+.card-body > .overflow-x-auto {
+  margin-inline: calc(-1 * var(--card-p, 1.5rem));
+}
+.card-body > .overflow-x-auto :where(th, td):first-child {
+  padding-inline-start: var(--card-p, 1.5rem);
+}
+.card-body > .overflow-x-auto :where(th, td):last-child {
+  padding-inline-end: var(--card-p, 1.5rem);
 }

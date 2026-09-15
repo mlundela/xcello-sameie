@@ -33,17 +33,17 @@
 <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
 	{#if submitted}
 		<div class="card w-full max-w-sm bg-base-100 shadow-xl">
-			<div class="card-body items-center text-center">
-				<h1 class="card-title text-2xl mb-2">Sjekk e-posten din</h1>
+			<div class="card-body items-center text-center gap-4">
+				<h1 class="text-2xl font-bold">Sjekk e-posten din</h1>
 				<p class="text-base-content/70">Vi har sendt en bekreftelseslenke til <strong>{email}</strong>. Klikk lenken for å aktivere kontoen.</p>
 			</div>
 		</div>
 	{:else}
 		<div class="card w-full max-w-sm bg-base-100 shadow-xl">
-			<div class="card-body">
-				<h1 class="card-title text-2xl mb-2">Opprett konto</h1>
+			<div class="card-body gap-4">
+				<h1 class="text-2xl font-bold">Opprett konto</h1>
 
-				<form onsubmit={signUp} class="flex flex-col gap-3">
+				<form onsubmit={signUp} class="flex flex-col gap-4">
 					<label class="floating-label">
 						<input
 							type="text"
@@ -86,7 +86,7 @@
 						</div>
 					{/if}
 
-					<button type="submit" disabled={loading} class="btn btn-primary w-full mt-1">
+					<button type="submit" disabled={loading} class="btn btn-primary w-full">
 						{#if loading}
 							<span class="loading loading-spinner loading-sm"></span>
 						{/if}
@@ -94,7 +94,7 @@
 					</button>
 				</form>
 
-				<div class="divider text-base-content/40"></div>
+				<div class="divider my-0 text-base-content/60"></div>
 
 				<p class="text-center text-sm text-base-content/60">
 					Har du allerede konto? <a href="/login?next={encodeURIComponent(next)}" class="link link-primary">Logg inn</a>

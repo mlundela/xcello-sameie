@@ -3,6 +3,7 @@
 	import { errorMessage } from '$lib/notify.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import PageHeader from '$lib/PageHeader.svelte';
 	import { get_husleie, set_bulk_rent } from './husleie.remote';
 
 	const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
@@ -16,7 +17,6 @@
 	let amounts = $state<Record<string, string>>({});
 	let saving = $state(false);
 	let error = $state('');
-	let success = $state(false);
 
 	function fillFromShare(flats: Awaited<typeof data>, changedFlatId: string) {
 		if (!autoFill) return;
@@ -34,7 +34,6 @@
 
 	async function handleSubmit(flats: Awaited<typeof data>) {
 		error = '';
-		success = false;
 		const rents = flats.map((f) => ({
 			flatId: f.id,
 			amountKr: Math.round(Number(amounts[f.id] ?? 0))
@@ -55,27 +54,30 @@
 	}
 </script>
 
-<div class="flex items-start justify-center pt-16 px-4">
-	<div class="w-full max-w-lg">
+<main class="max-w-2xl px-4 sm:px-6 py-8 flex flex-col gap-6">
+	<PageHeader crumbs={[{ href: '/flats', label: 'Leiligheter' }]} title="Oppdater husleien" />
 
-		<ul class="steps w-full mb-6">
+	{#if !page.data.canEdit}
+		<div class="card bg-base-100">
+			<div class="card-body gap-4">
+				<p class="text-base-content/70">Bare administratorer kan endre husleien.</p>
+				<div class="card-actions">
+					<a href="/flats" class="btn btn-ghost">Tilbake til leiligheter</a>
+				</div>
+			</div>
+		</div>
+	{:else}
+		<ul class="steps w-full">
 			<li class="step" class:step-primary={step >= 1}>Gjelder fra</li>
 			<li class="step" class:step-primary={step >= 2}>Nye satser</li>
 		</ul>
 
-		<div class="card bg-base-100 shadow-xl">
-			<div class="card-body">
-
-				{#if !page.data.canEdit}
-					<h1 class="card-title text-xl mb-2">Oppdater husleien</h1>
-					<p class="text-sm text-base-content/70">Bare administratorer kan endre husleien.</p>
-					<a href="/flats" class="btn btn-ghost mt-2">Tilbake til leiligheter</a>
-				{:else if step === 1}
-					<h1 class="card-title text-xl mb-2">Velg startdato</h1>
-					<p class="text-sm text-base-content/60 mb-4">
-						Fra hvilken måned skal de nye satsene gjelde?
-					</p>
-					<div class="flex gap-3 mb-6">
+		<div class="card bg-base-100">
+			<div class="card-body gap-4">
+				{#if step === 1}
+					<h2 class="card-title">Velg startdato</h2>
+					<p class="text-base-content/70">Fra hvilken måned skal de nye satsene gjelde?</p>
+					<div class="flex gap-3">
 						<label class="flex flex-col gap-1">
 							<span class="text-sm font-medium">Måned</span>
 							<select bind:value={fromMonth} class="select select-bordered">
@@ -96,71 +98,65 @@
 						</label>
 					</div>
 					<button onclick={() => (step = 2)} class="btn btn-primary w-full">Neste</button>
-
 				{:else}
 					{#await data}
 						<div class="flex justify-center py-12">
 							<span class="loading loading-spinner loading-lg text-primary"></span>
 						</div>
 					{:then flats}
-						<h1 class="card-title text-xl mb-1">Nye satser</h1>
-						<p class="text-sm text-base-content/60 mb-4">
-							Gjelder fra {MONTHS[fromMonth - 1]} {fromYear}
-						</p>
+						<h2 class="card-title">Nye satser</h2>
+						<p class="text-base-content/70">Gjelder fra {MONTHS[fromMonth - 1]} {fromYear}</p>
 
-						<label class="flex items-center gap-2 text-sm cursor-pointer mb-4">
+						<label class="flex items-center gap-2 cursor-pointer">
 							<input type="checkbox" bind:checked={autoFill} class="checkbox checkbox-sm" />
 							Fyll ut automatisk basert på sameiebrøk
 						</label>
 
-						<div class="overflow-x-auto mb-4"><table class="table table-sm">
-							<thead>
-								<tr>
-									<th>Nr.</th>
-									<th>Bruksenhet</th>
-									<th>Brøk</th>
-									<th>Gjeldende</th>
-									<th>Ny (kr/mnd)</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each flats as f}
+						<div class="overflow-x-auto">
+							<table class="table">
+								<thead>
 									<tr>
-										<td class="tabular-nums">{f.nummer}</td>
-										<td class="font-mono">{f.flatNo}</td>
-										<td class="tabular-nums">{f.shareNumerator}/{f.shareDenominator}</td>
-										<td class="tabular-nums text-base-content/60 text-sm">
-											{#if f.currentRentAmount !== null}
-												{formatKr(f.currentRentAmount, { decimals: false })}
-											{:else}
-												<span class="text-base-content/30">—</span>
-											{/if}
-										</td>
-										<td>
-											<input
-												type="number"
-												bind:value={amounts[f.id]}
-												onblur={() => fillFromShare(flats, f.id)}
-												aria-label="Ny husleie for {f.flatNo}"
-												min="1"
-												step="1"
-												placeholder="0"
-												class="input input-bordered input-sm w-28 tabular-nums"
-											/>
-										</td>
+										<th>Nr.</th>
+										<th>Bruksenhet</th>
+										<th>Brøk</th>
+										<th>Gjeldende</th>
+										<th>Ny (kr/mnd)</th>
 									</tr>
-								{/each}
-							</tbody>
-						</table></div>
+								</thead>
+								<tbody>
+									{#each flats as f}
+										<tr>
+											<td class="tabular-nums">{f.nummer}</td>
+											<td class="font-mono">{f.flatNo}</td>
+											<td class="tabular-nums">{f.shareNumerator}/{f.shareDenominator}</td>
+											<td class="tabular-nums text-base-content/70">
+												{#if f.currentRentAmount !== null}
+													{formatKr(f.currentRentAmount, { decimals: false })}
+												{:else}
+													—
+												{/if}
+											</td>
+											<td class="py-0">
+												<input
+													type="number"
+													bind:value={amounts[f.id]}
+													onblur={() => fillFromShare(flats, f.id)}
+													aria-label="Ny husleie for {f.flatNo}"
+													min="1"
+													step="1"
+													placeholder="0"
+													class="input input-bordered input-sm w-28 tabular-nums"
+												/>
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
 
 						{#if error}
-							<div role="alert" class="alert alert-error alert-soft mb-3">
+							<div role="alert" class="alert alert-error alert-soft">
 								<span>{error}</span>
-							</div>
-						{/if}
-						{#if success}
-							<div role="alert" class="alert alert-success alert-soft mb-3">
-								<span>Husleie oppdatert.</span>
 							</div>
 						{/if}
 
@@ -177,9 +173,7 @@
 						</div>
 					{/await}
 				{/if}
-
 			</div>
 		</div>
-
-	</div>
-</div>
+	{/if}
+</main>

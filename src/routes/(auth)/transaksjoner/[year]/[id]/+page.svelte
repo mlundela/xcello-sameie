@@ -2,6 +2,7 @@
 	import { formatKr } from '$lib/money';
 	import { errorMessage } from '$lib/notify.svelte';
 	import { page } from '$app/state';
+	import PageHeader from '$lib/PageHeader.svelte';
 	import KategoriSelect from '../KategoriSelect.svelte';
 	import {
 		get_transaction,
@@ -54,23 +55,15 @@
 	});
 </script>
 
-{#await Promise.all([txQuery, rulesData, accountsData])}
-	<div class="flex justify-center py-12">
-		<span class="loading loading-spinner loading-lg text-primary"></span>
-	</div>
-{:then [tx, { owners }, accounts]}
-	{@const isIncome = tx.amountOre > 0}
-	{@const typeLabel = isIncome ? 'Innbetalinger' : 'Utbetalinger'}
-	{@const typeParam = isIncome ? 'income' : 'expense'}
-
-	<main class="max-w-2xl px-6 py-8 flex flex-col gap-6">
-		<div class="breadcrumbs text-sm">
-			<ul>
-				<li><a href="/dashboard">Hjem</a></li>
-				<li><a href="/transaksjoner/{year}?type={typeParam}">{typeLabel}</a></li>
-				<li>{tx.userDescription ?? tx.description}</li>
-			</ul>
+<main class="max-w-2xl px-4 sm:px-6 py-8 flex flex-col gap-6">
+	{#await Promise.all([txQuery, rulesData, accountsData])}
+		<div class="flex justify-center py-12">
+			<span class="loading loading-spinner loading-lg text-primary"></span>
 		</div>
+	{:then [tx, { owners }, accounts]}
+		{@const isIncome = tx.amountOre > 0}
+
+		<PageHeader crumbs={[{ href: `/transaksjoner/${year}`, label: 'Transaksjoner' }]} title={tx.userDescription ?? tx.description} />
 
 		<div class="card bg-base-100">
 			<div class="card-body gap-4">
@@ -86,33 +79,33 @@
 					{/await}
 				</div>
 
-				<div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
-					<div>
-						<p class="text-base-content/50 text-xs">Dato</p>
-						<p>{tx.date}</p>
+				<dl class="grid grid-cols-2 gap-x-4 gap-y-3">
+					<div class="flex flex-col gap-1">
+						<dt class="text-base-content/70">Dato</dt>
+						<dd class="tabular-nums">{tx.date}</dd>
 					</div>
-					<div>
-						<p class="text-base-content/50 text-xs">Beløp</p>
-						<p class="font-mono {isIncome ? 'text-success' : 'text-error'}">{formatKr(tx.amountOre)}</p>
+					<div class="flex flex-col gap-1">
+						<dt class="text-base-content/70">Beløp</dt>
+						<dd class="tabular-nums {isIncome ? 'text-success' : 'text-error'}">{formatKr(tx.amountOre)}</dd>
 					</div>
-					<div>
-						<p class="text-base-content/50 text-xs">Fra kontoutskrift</p>
-						<p>{tx.fileName}</p>
+					<div class="flex flex-col gap-1">
+						<dt class="text-base-content/70">Fra kontoutskrift</dt>
+						<dd class="break-all">{tx.fileName}</dd>
 					</div>
-				</div>
+				</dl>
 
 				<div class="divider my-0"></div>
 
-				<div class="flex flex-col gap-2">
-					<p class="text-xs font-medium">Beskrivelse</p>
+				<section class="flex flex-col gap-3">
+					<h3 class="text-sm font-semibold text-base-content/70">Beskrivelse</h3>
 					{#if !editingDesc}
-						<div class="flex items-center justify-between">
+						<div class="flex items-center justify-between gap-3">
 							<div>
 								{#if tx.userDescription}
-									<p class="text-sm font-medium">{tx.userDescription}</p>
-									<p class="text-xs text-base-content/50">{tx.description}</p>
+									<p class="font-medium">{tx.userDescription}</p>
+									<p class="text-base-content/70">{tx.description}</p>
 								{:else}
-									<p class="text-sm">{tx.description}</p>
+									<p>{tx.description}</p>
 								{/if}
 							</div>
 							{#if page.data.canEdit}
@@ -135,25 +128,25 @@
 							>Lagre</button>
 						</div>
 					{/if}
-				</div>
+				</section>
 			</div>
 		</div>
 
 		<div class="card bg-base-100">
 			<div class="card-body gap-4">
-				<h2 class="card-title text-base">Kategorisering</h2>
+				<h2 class="card-title">Kategorisering</h2>
 
 				{#if tx.status !== 'UNMATCHED'}
-					<div class="flex items-center justify-between">
-						<div class="text-sm">
+					<div class="flex items-center justify-between gap-3">
+						<dl class="flex flex-col gap-1">
 							{#if tx.ownerName}
-								<span class="text-base-content/50 text-xs block">Koblet til</span>
-								{tx.ownerName}
+								<dt class="text-base-content/70">Koblet til</dt>
+								<dd>{tx.ownerName}</dd>
 							{:else if tx.ledgerAccountName}
-								<span class="text-base-content/50 text-xs block">Konto</span>
-								{tx.ledgerAccountCode} {tx.ledgerAccountName}
+								<dt class="text-base-content/70">Konto</dt>
+								<dd><span class="font-mono">{tx.ledgerAccountCode}</span> {tx.ledgerAccountName}</dd>
 							{/if}
-						</div>
+						</dl>
 						{#if page.data.canEdit}
 							<button
 								class="btn btn-ghost btn-sm text-error"
@@ -170,7 +163,7 @@
 						onpick={(k) => (k.kind === 'owner' ? match_transaction({ transactionId: id, ownerId: k.ownerId }) : categorize_transaction({ transactionId: id, ledgerAccountId: k.ledgerAccountId })).updates(txQuery)}
 					/>
 				{:else}
-					<p class="text-sm text-base-content/50">Ikke kategorisert.</p>
+					<p class="text-base-content/60">Ikke kategorisert.</p>
 				{/if}
 			</div>
 		</div>
@@ -178,7 +171,7 @@
 		<div class="card bg-base-100">
 			<div class="card-body gap-4">
 				<div class="flex items-center justify-between">
-					<h2 class="card-title text-base">Vedlegg</h2>
+					<h2 class="card-title">Vedlegg</h2>
 					<form {...upload} enctype="multipart/form-data">
 						<input type="hidden" name="transactionId" value={id} />
 						<button type="button" class="btn btn-sm btn-primary" disabled={upload_attachment.pending > 0 || tx.receiptNotRequired} onclick={() => fileInput!.click()}>
@@ -198,7 +191,7 @@
 				</div>
 
 				{#if uploadError}
-					<div class="alert alert-error py-2 px-4 text-sm">{uploadError}</div>
+					<div role="alert" class="alert alert-error alert-soft">{uploadError}</div>
 				{/if}
 
 				{#await attachmentsQuery then attachments}
@@ -211,21 +204,21 @@
 								disabled={!page.data.canEdit}
 								onchange={(e) => set_receipt_not_required({ transactionId: id, value: e.currentTarget.checked }).updates(txQuery)}
 							/>
-							<span class="text-sm">Kvittering ikke nødvendig</span>
+							Kvittering ikke nødvendig
 						</label>
-						<p class="text-sm text-base-content/40">Ingen vedlegg lastet opp.</p>
+						<p class="text-base-content/60">Ingen vedlegg lastet opp.</p>
 					{:else}
 						<ul class="flex flex-col divide-y divide-base-200">
 							{#each attachments as att}
-								<li class="flex items-center gap-3 py-2">
+								<li class="flex items-center gap-3 py-3">
 									<a
 										href="/vedlegg/{att.id}"
 										target="_blank"
 										rel="noopener"
-										class="link link-primary text-sm flex-1 truncate"
+										class="link link-primary flex-1 truncate"
 									>{att.fileName}</a>
 									<button
-										class="btn btn-ghost btn-xs text-error"
+										class="btn btn-ghost btn-sm text-error"
 										onclick={() => delete_attachment({ attachmentId: att.id }).updates(attachmentsQuery)}
 									>Slett</button>
 								</li>
@@ -235,9 +228,7 @@
 				{/await}
 			</div>
 		</div>
-	</main>
-{:catch err}
-	<div class="max-w-2xl px-6 py-8">
+	{:catch err}
 		<div role="alert" class="alert alert-error">{errorMessage(err)}</div>
-	</div>
-{/await}
+	{/await}
+</main>

@@ -15,6 +15,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { readAsBase64 } from '$lib/file';
+	import PageHeader from '$lib/PageHeader.svelte';
 	import KategoriSelect from './KategoriSelect.svelte';
 
 	const periodsQuery = get_periods();
@@ -126,12 +127,7 @@
 </script>
 
 <main class="max-w-5xl px-4 sm:px-6 py-8 flex flex-col gap-6">
-	<div class="breadcrumbs text-sm">
-		<ul>
-			<li><a href="/dashboard">Hjem</a></li>
-			<li>Transaksjoner</li>
-		</ul>
-	</div>
+	<PageHeader crumbs={[]} title="Transaksjoner" />
 
 	{#await periodsQuery then periods}
 		<div class="flex items-center gap-4 flex-wrap">
@@ -161,10 +157,11 @@
 				{/each}
 			</select>
 
-			<div role="tablist" class="tabs tabs-box tabs-sm">
-				<button role="tab" class="tab" class:tab-active={filter === 'all'} onclick={() => setFilters({ type: null })}>Alle</button>
-				<button role="tab" class="tab" class:tab-active={filter === 'income'} onclick={() => setFilters({ type: 'income' })}>Innbetalinger</button>
-				<button role="tab" class="tab" class:tab-active={filter === 'expense'} onclick={() => setFilters({ type: 'expense' })}>Utbetalinger</button>
+			<!-- Filter buttons styled as tabs; there are no tab panels, so no tab roles -->
+			<div role="group" aria-label="Type" class="tabs tabs-box tabs-sm">
+				<button class="tab" class:tab-active={filter === 'all'} aria-pressed={filter === 'all'} onclick={() => setFilters({ type: null })}>Alle</button>
+				<button class="tab" class:tab-active={filter === 'income'} aria-pressed={filter === 'income'} onclick={() => setFilters({ type: 'income' })}>Innbetalinger</button>
+				<button class="tab" class:tab-active={filter === 'expense'} aria-pressed={filter === 'expense'} onclick={() => setFilters({ type: 'expense' })}>Utbetalinger</button>
 			</div>
 
 			<label class="flex items-center gap-2 text-sm cursor-pointer">
@@ -174,12 +171,12 @@
 
 			<div class="ml-auto flex items-center gap-2">
 				{#if importResult}
-					<div class="alert alert-success py-2 px-4 text-sm">
+					<div role="status" class="alert alert-success py-2 px-4 text-sm">
 						{importResult.imported} importert, {importResult.skipped} hoppet over
 					</div>
 				{/if}
 				{#if importError}
-					<div class="alert alert-error py-2 px-4 text-sm">{importError}</div>
+					<div role="alert" class="alert alert-error py-2 px-4 text-sm">{importError}</div>
 				{/if}
 				{#if page.data.canEdit}
 					<button class="btn btn-primary btn-sm" disabled={importing} onclick={() => fileInput!.click()}>
@@ -199,14 +196,15 @@
 	{:then [rows, { owners }, accounts]}
 		{#if rows.length === 0}
 			<div class="card bg-base-100">
-				<div class="card-body items-center">
+				<div class="card-body items-center gap-4">
 					<p class="text-base-content/60">{month || todo ? 'Ingen transaksjoner passer filteret.' : `Ingen transaksjoner for ${year}.`}</p>
 				</div>
 			</div>
 		{:else}
 			<div class="card bg-base-100">
-				<div class="card-body p-0 overflow-x-auto">
-					<table class="table table-sm">
+				<div class="card-body py-2">
+					<div class="overflow-x-auto">
+					<table class="table">
 						<thead>
 							<tr>
 								<th>Dato</th>
@@ -221,23 +219,22 @@
 								{@const isIncome = row.amountOre > 0}
 								{@const s = effectiveStatus(row.status, row.attachmentCount, row.receiptNotRequired)}
 								<tr>
-									<td class="text-base-content whitespace-nowrap">{row.date}</td>
+									<td class="tabular-nums whitespace-nowrap">{row.date}</td>
 									<td class="max-w-xs">
 										<a href="/transaksjoner/{year}/{row.id}" class="hover:underline truncate">
 											{row.userDescription ?? row.description}
 										</a>
 									</td>
-									<td class="text-right font-mono whitespace-nowrap {isIncome ? 'text-success' : 'text-error'}">{formatKr(row.amountOre)}</td>
+									<td class="text-right tabular-nums whitespace-nowrap {isIncome ? 'text-success' : 'text-error'}">{formatKr(row.amountOre)}</td>
 									<td>
 										<span class="badge badge-sm {s.cls}">{s.label}</span>
 									</td>
-									<td class="text-base-content">
+									<td class="py-0">
 										{#if row.status === 'UNMATCHED' && page.data.canEdit}
 											<KategoriSelect
 												{isIncome}
 												{owners}
 												{accounts}
-												class="select-xs"
 												label="Kategori for {row.userDescription ?? row.description}"
 												placeholder={isIncome ? 'Kategoriser...' : 'Velg...'}
 												onpick={(k) => {
@@ -262,6 +259,7 @@
 							{/each}
 						</tbody>
 					</table>
+					</div>
 				</div>
 			</div>
 		{/if}
@@ -271,7 +269,7 @@
 
 	<dialog bind:this={dialogEl} class="modal">
 		<div class="modal-box flex flex-col gap-4">
-			<h3 class="font-bold text-lg">Lag matchingsregel?</h3>
+			<h2 class="font-bold text-lg">Lag matchingsregel?</h2>
 			{#if pendingAction?.kind === 'income'}
 				<p class="text-sm text-base-content/70">
 					Vil du lage en regel som automatisk kobler fremtidige innbetalinger til
@@ -285,21 +283,21 @@
 			{/if}
 			<label class="flex flex-col gap-1">
 				<span class="text-sm font-medium">Mønster</span>
-				<input class="input input-bordered input-sm" bind:value={rulePattern} placeholder="F.eks. «Strøm AS»" />
-				<span class="text-xs text-base-content/50">Transaksjoner der beskrivelsen inneholder dette mønsteret kategoriseres automatisk.</span>
+				<input class="input input-bordered w-full" bind:value={rulePattern} placeholder="F.eks. «Strøm AS»" />
+				<span class="text-xs text-base-content/60">Transaksjoner der beskrivelsen inneholder dette mønsteret kategoriseres automatisk.</span>
 			</label>
 			<label class="flex flex-col gap-1">
 				<span class="text-sm font-medium">Beskrivelse (valgfri)</span>
-				<input class="input input-bordered input-sm" bind:value={ruleUserDescription} placeholder="F.eks. «Strømregning»" />
-				<span class="text-xs text-base-content/50">Overstyrer bankens beskrivelse på matchede transaksjoner.</span>
+				<input class="input input-bordered w-full" bind:value={ruleUserDescription} placeholder="F.eks. «Strømregning»" />
+				<span class="text-xs text-base-content/60">Overstyrer bankens beskrivelse på matchede transaksjoner.</span>
 			</label>
 			<label class="flex items-center gap-2 cursor-pointer">
-				<input type="checkbox" class="checkbox checkbox-sm" bind:checked={ruleReceiptNotRequired} />
+				<input type="checkbox" class="checkbox" bind:checked={ruleReceiptNotRequired} />
 				<span class="text-sm">Krever ikke kvittering</span>
 			</label>
 			<div class="modal-action gap-2">
 				<button
-					class="btn btn-ghost btn-sm"
+					class="btn btn-ghost"
 					onclick={() => {
 						if (!pendingAction) return;
 						if (pendingAction.kind === 'income') {
@@ -311,7 +309,7 @@
 					}}
 				>Bare denne</button>
 				<button
-					class="btn btn-primary btn-sm"
+					class="btn btn-primary"
 					disabled={!rulePattern}
 					onclick={() => {
 						if (!pendingAction) return;

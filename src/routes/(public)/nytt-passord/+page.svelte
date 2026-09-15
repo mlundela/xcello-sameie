@@ -35,14 +35,14 @@
 
 <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
 	<div class="card w-full max-w-sm bg-base-100 shadow-xl">
-		<div class="card-body">
-			<h1 class="card-title text-2xl mb-2">Nytt passord</h1>
+		<div class="card-body gap-4">
+			<h1 class="text-2xl font-bold">Nytt passord</h1>
 
 			{#if linkInvalid}
 				<p class="text-base-content/70">Lenken er ugyldig eller utløpt.</p>
-				<a href="/glemt-passord" class="btn btn-primary w-full mt-2">Be om en ny lenke</a>
+				<a href="/glemt-passord" class="btn btn-primary w-full">Be om en ny lenke</a>
 			{:else}
-				<form onsubmit={submit} class="flex flex-col gap-3">
+				<form onsubmit={submit} class="flex flex-col gap-4">
 					<label class="floating-label">
 						<input
 							type="password"

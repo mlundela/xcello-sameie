@@ -29,16 +29,16 @@
 
 <div class="min-h-screen bg-base-200 flex items-center justify-center px-4">
 	<div class="card w-full max-w-sm bg-base-100 shadow-xl">
-		<div class="card-body">
-			<h1 class="card-title text-2xl mb-2">Velkommen tilbake</h1>
+		<div class="card-body gap-4">
+			<h1 class="text-2xl font-bold">Velkommen tilbake</h1>
 
 			{#if page.url.searchParams.has('reset')}
-				<div role="alert" class="alert alert-success alert-soft">
+				<div role="status" class="alert alert-success alert-soft">
 					<span>Passordet er endret. Logg inn med det nye passordet.</span>
 				</div>
 			{/if}
 
-			<form onsubmit={signInWithEmail} class="flex flex-col gap-3">
+			<form onsubmit={signInWithEmail} class="flex flex-col gap-4">
 				<label class="floating-label">
 					<input
 						type="email"
@@ -70,7 +70,7 @@
 					</div>
 				{/if}
 
-				<button type="submit" disabled={loading} class="btn btn-primary w-full mt-1">
+				<button type="submit" disabled={loading} class="btn btn-primary w-full">
 					{#if loading}
 						<span class="loading loading-spinner loading-sm"></span>
 					{/if}
@@ -78,13 +78,13 @@
 				</button>
 			</form>
 
-			<div class="divider text-base-content/40">eller</div>
+			<div class="divider my-0 text-base-content/60">eller</div>
 
 			<button onclick={signInWithGoogle} class="btn btn-outline w-full">
 				Logg inn med Google
 			</button>
 
-			<div class="divider text-base-content/40"></div>
+			<div class="divider my-0 text-base-content/60"></div>
 
 			<p class="text-center text-sm text-base-content/60">
 				Ingen konto? <a href="/signup?next={encodeURIComponent(next)}" class="link link-primary">Registrer deg</a>
